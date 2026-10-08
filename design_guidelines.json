@@ -1,0 +1,299 @@
+{
+  "project_name": "Talksme.in OmniChat CRM",
+  "brand_identity": {
+    "name": "talksme.in",
+    "tagline": "Next-Gen Conversational CRM & Multi-Tenant WhatsApp Business Operating System",
+    "logo_url": "https://customer-assets-m6fa6gv7.emergentagent.net/job_9a74ecc3-1406-41c7-b859-27f365d11bd4/artifacts/eff273b31f7ef718_Talksme.in_Gradient_Chat_Logo-removebg-preview.png",
+    "logo_style": "Cyan-to-Blue-to-Violet gradient chat bubble with three dots, dark navy wordmark with 'me' highlighted in violet-blue and '.in' in bold cyan.",
+    "theme_archetype": "ARCHETYPE 4 + ARCHETYPE 7 Hybrid: High-Tech Indigo & Electric Cyan Precision SaaS"
+  },
+  "typography": {
+    "font_family_heading": "'Plus Jakarta Sans Variable', sans-serif",
+    "font_family_body": "'Inter Variable', sans-serif",
+    "font_family_mono": "'JetBrains Mono Variable', monospace",
+    "css_import": "@import \"@fontsource-variable/plus-jakarta-sans\";\n@import \"@fontsource-variable/inter\";\n@import \"@fontsource-variable/jetbrains-mono\";",
+    "scale_px": {
+      "display": 56,
+      "h1": 44,
+      "h2": 32,
+      "h3": 24,
+      "h4": 18,
+      "body": 16,
+      "caption": 14
+    },
+    "letter_spacing": {
+      "display": "-0.035em",
+      "headings": "-0.025em",
+      "labels": "0.08em",
+      "body": "-0.01em"
+    }
+  },
+  "colors": {
+    "brand_gradient": "linear-gradient(135deg, #06B6D4 0%, #3B82F6 50%, #8B5CF6 100%)",
+    "brand_gradient_subtle": "linear-gradient(135deg, rgba(6,182,212,0.12) 0%, rgba(59,130,246,0.12) 50%, rgba(139,92,246,0.12) 100%)",
+    "accent": "#0284C7",
+    "on_accent": "#FFFFFF",
+    "accent_hover": "#0369A1",
+    "surfaces": [
+      {
+        "name": "page_light",
+        "kind": "solid",
+        "bg": "#F8FAFC",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "border": "#E2E8F0",
+          "link": "#0284C7",
+          "success": "#059669",
+          "warning": "#D97706",
+          "danger": "#DC2626",
+          "info": "#2563EB"
+        }
+      },
+      {
+        "name": "card_light",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "border": "#E2E8F0",
+          "subtle_hover": "#F1F5F9"
+        }
+      },
+      {
+        "name": "sidebar_light",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "active_bg": "#EFF6FF",
+          "active_text": "#1D4ED8",
+          "border": "#E2E8F0"
+        }
+      },
+      {
+        "name": "chat_bubble_outgoing_light",
+        "kind": "solid",
+        "bg": "#DCF8C6",
+        "on_bg": "#064E3B",
+        "on_bg_muted": "#047857"
+      },
+      {
+        "name": "chat_bubble_incoming_light",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#64748B"
+      },
+      {
+        "name": "page_dark",
+        "kind": "solid",
+        "bg": "#0B1220",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#1E293B",
+          "link": "#38BDF8",
+          "success": "#10B981",
+          "warning": "#FBBF24",
+          "danger": "#F87171",
+          "info": "#60A5FA"
+        }
+      },
+      {
+        "name": "card_dark",
+        "kind": "solid",
+        "bg": "#111C33",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#1E293B",
+          "subtle_hover": "#172545"
+        }
+      },
+      {
+        "name": "sidebar_dark",
+        "kind": "solid",
+        "bg": "#0A101D",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "active_bg": "#1E2E4E",
+          "active_text": "#38BDF8",
+          "border": "#1E293B"
+        }
+      },
+      {
+        "name": "chat_bubble_outgoing_dark",
+        "kind": "solid",
+        "bg": "#054C44",
+        "on_bg": "#E6FFFA",
+        "on_bg_muted": "#6EE7B7"
+      },
+      {
+        "name": "chat_bubble_incoming_dark",
+        "kind": "solid",
+        "bg": "#17233B",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8"
+      },
+      {
+        "name": "hero_glass_badge",
+        "kind": "glass",
+        "contrast_against": "#0F172A",
+        "guarantee": "backdrop-blur-xl bg-slate-900/80 border border-slate-700/60 shadow-lg",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8"
+      },
+      {
+        "name": "deposit_ledger_disputed",
+        "kind": "solid",
+        "bg": "#FEF2F2",
+        "on_bg": "#991B1B",
+        "on_bg_muted": "#B91C1C"
+      },
+      {
+        "name": "deposit_ledger_reviewed",
+        "kind": "solid",
+        "bg": "#EFF6FF",
+        "on_bg": "#1E40AF",
+        "on_bg_muted": "#3B82F6"
+      },
+      {
+        "name": "deposit_ledger_recorded",
+        "kind": "solid",
+        "bg": "#ECFDF5",
+        "on_bg": "#065F46",
+        "on_bg_muted": "#059669"
+      },
+      {
+        "name": "deposit_ledger_reversed",
+        "kind": "solid",
+        "bg": "#F5F3FF",
+        "on_bg": "#5B21B6",
+        "on_bg_muted": "#7C3AED"
+      }
+    ]
+  },
+  "entry_surfaces": {
+    "/": "editorial split landing with branded gradient chat hero, live interactive chat preview right, and live stats ticker",
+    "/demo": "interactive role command hub with 4 role cards (Customer PWA, Employee, Admin, Super Admin) with direct 1-click test credentials",
+    "/chat": "universal customer PWA with instant live agent handover, conversation history, and Template A/B embed view",
+    "/chat/:conversationId": "full-screen direct customer conversation session with media previews and simulated call trigger",
+    "/employee": "WhatsApp Web-style 3-pane responsive workstation with conversation queue, active chat window, and live CRM drawer",
+    "/admin": "executive operations control plane with real-time KPI metrics, employee audit logs, deposit approvals, and landing page builder",
+    "/superadmin": "tenant fleet manager with multi-org governance, SaaS billing tiers, domain routing, and platform audit stream"
+  },
+  "navigation_and_layout": {
+    "header_pattern": "Sticky crystal glass header with talksme.in logo, multi-tenant org switcher, quick role switch, theme toggle, and live status badge",
+    "sidebar_pattern": "Tactical dual-tier sidebar: Primary icon rail (collapsible) + secondary contextual navigation with badge counters",
+    "three_pane_inbox": {
+      "left_pane": "Conversations list (search, filters by Unassigned/Open/Resolved, SLA timer, unread badges)",
+      "center_pane": "Active Chat Stream with WhatsApp/Intercom aesthetic, quick canned replies, voice message player, simulated call bar",
+      "right_pane": "Customer 360° Drawer (lead score, manual deposit ledger history, custom tags, assigned agent transfer modal)"
+    }
+  },
+  "mocked_integrations_badge": {
+    "label": "MOCKED INTEGRATION",
+    "style": "bg-amber-500/10 text-amber-500 dark:text-amber-400 border border-amber-500/20 text-xs font-mono font-medium px-2 py-0.5 rounded",
+    "applicable_modules": [
+      "Simulated WebRTC Audio Calls",
+      "Stripe / Razorpay SaaS Seat Billing",
+      "Meta WhatsApp Cloud API / Webhook Receiver",
+      "Custom CNAME Domain Provisioning",
+      "Push Notification Simulator",
+      "Meta Pixel & Google Tag Manager Analytics Tracker"
+    ]
+  },
+  "image_urls": {
+    "brand_logo": {
+      "url": "https://customer-assets-m6fa6gv7.emergentagent.net/job_9a74ecc3-1406-41c7-b859-27f365d11bd4/artifacts/eff273b31f7ef718_Talksme.in_Gradient_Chat_Logo-removebg-preview.png",
+      "description": "Talksme.in Official Brand Logo with Cyan-Blue-Violet gradient speech bubble and crisp wordmark"
+    },
+    "support_agents": [
+      {
+        "url": "https://images.unsplash.com/photo-1766066014237-00645c74e9c6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MTJ8MHwxfHNlYXJjaHwyfHxzYWFzJTIwdGVhbSUyMGN1c3RvbWVyJTIwc3VwcG9ydHxlbnwwfHx8fDE3OTE0NjczODN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Senior Support Specialist Priya Sharma (Customer Success Lead)"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1580894899378-92e56886cd4d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MTJ8MHwxfHNlYXJjaHw0fHxzYWFzJTIwdGVhbSUyMGN1c3RvbWVyJTIwc3VwcG9ydHxlbnwwfHx8fDE3OTE0NjczODN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Operations & Billing Reviewer Rohan Patel"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1603714228681-b399854b8f80?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MTJ8MHwxfHNlYXJjaHwzfHxzYWFzJTIwdGVhbSUyMGN1c3RvbWVyJTIwc3VwcG9ydHxlbnwwfHx8fDE3OTE0NjczODN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Tech Support Lead Vikram Malhotra"
+      }
+    ],
+    "avatars": [
+      {
+        "url": "https://images.unsplash.com/photo-1740252117013-4fb21771e7ca?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBidXNpbmVzcyUyMGF2YXRhciUyMHVzZXJ8ZW58MHx8fHwxNzkxNDY3MzgzfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Avatar user Rahul Verma (Customer ID: CUST-901)"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1740252117027-4275d3f84385?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBidXNpbmVzcyUyMGF2YXRhciUyMHVzZXJ8ZW58MHx8fHwxNzkxNDY3MzgzfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Avatar user Ananya Gupta (Customer ID: CUST-902)"
+      }
+    ]
+  },
+  "components_specification": {
+    "landing_builder": {
+      "path": "frontend/src/components/landing-builder/LandingPageBuilder.tsx",
+      "features": [
+        "Template A: Product Image Grid Showcase with CTA to chat",
+        "Template B: Direct WhatsApp-style chat embed interface",
+        "Live Device Preview Toggle: iPhone 16 viewport vs Desktop 1080p",
+        "Configurable Headline, Primary Color, WhatsApp Floating Widget, and Lead Capture Form"
+      ]
+    },
+    "deposit_ledger": {
+      "path": "frontend/src/components/deposits/DepositLedgerTable.tsx",
+      "statuses": ["Recorded", "Reviewed", "Disputed", "Reversed"],
+      "features": [
+        "Append-only audit trail modal with immutable event timestamps",
+        "Currency support with INR (₹) as default for Indian founders + USD ($) multi-tenant switch",
+        "Status transition controls: Review -> Approve / Dispute / Reverse with required manager note",
+        "Export to CSV / Excel sheet simulation"
+      ]
+    },
+    "simulated_call_modal": {
+      "path": "frontend/src/components/chat/SimulatedCallModal.tsx",
+      "features": [
+        "Audio waveform pulse animation using Tailwind and Canvas",
+        "Call timer, mute, speaker, and end call controls",
+        "Call recording playback simulation and speech-to-text transcript generation",
+        "Clearly labelled with MOCKED WebRTC badge"
+      ]
+    },
+    "role_switcher_and_demo": {
+      "path": "frontend/src/components/auth/RoleQuickSelector.tsx",
+      "credentials": [
+        {"role": "Customer", "email": "customer@talksme.in", "path": "/chat"},
+        {"role": "Employee", "email": "agent@talksme.in", "path": "/employee"},
+        {"role": "Admin", "email": "admin@talksme.in", "path": "/admin"},
+        {"role": "Super Admin", "email": "superadmin@talksme.in", "path": "/superadmin"}
+      ]
+    }
+  },
+  "motion_and_interactions": {
+    "transitions": "transition-colors duration-200 ease-out, opacity 150ms ease-in-out",
+    "hover_lift": "hover:-translate-y-0.5 hover:shadow-md transition-transform duration-200",
+    "spring_physics": "stiffness 300, damping 25 for modal overlays and drawer sheets",
+    "reduced_motion": "Wrap animations in @media (prefers-reduced-motion: reduce) or motion.div with conditional duration: 0"
+  },
+  "accessibility_requirements": {
+    "contrast": "All text strictly meets WCAG AA 4.5:1 ratio against their background surfaces",
+    "data_testid": "Every interactive button, input, table row, tab trigger, and status badge MUST have kebab-case data-testid (e.g. data-testid='chat-send-button', data-testid='deposit-status-badge')",
+    "keyboard_nav": "Focus-visible rings with ring-2 ring-offset-2 ring-sky-500 on all interactive components"
+  },
+  "instructions_to_main_agent": [
+    "Always display the official brand logo 'talksme.in' from the provided asset URL in the header and login screens.",
+    "Use the brand gradient (Cyan #06B6D4 to Royal Blue #3B82F6 to Violet #8B5CF6) for CTA buttons, hero badges, and active state indicators.",
+    "Provide seamless Light and Dark mode using the predefined surface tokens in globals/index.css.",
+    "Implement all 4 roles with a quick 1-click demo switcher at /demo and in the top navigation bar for effortless testing.",
+    "Prominently mark simulated integrations (Audio Calls, Stripe/Razorpay Billing, Webhook Engine, Custom Domains) with the MOCKED label badge.",
+    "Ensure all deposit ledger actions (Recorded, Reviewed, Disputed, Reversed) update real backend state with immutable audit records.",
+    "Build the 3-pane WhatsApp Web-style inbox with full responsive collapse for mobile/tablet viewports."
+  ]
+}

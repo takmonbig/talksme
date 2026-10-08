@@ -1,0 +1,129 @@
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { EmptyState, MockBadge, Skeleton } from "@/components/common";
+import { LandingRender } from "@/components/LandingRender";
+import { apiGet, apiPost } from "@/lib/api";
+import { beginSession } from "@/lib/session";
+import { toastErr } from "@/lib/hooks";
+import type { PublicLanding as PL, StartChatOut } from "@/lib/types";
+
+const CODES = [["+91", "India"], ["+1", "US/Canada"], ["+44", "UK"], ["+971", "UAE"], ["+65", "Singapore"], ["+61", "Australia"], ["+49", "Germany"], ["+234", "Nigeria"]];
+
+export default function PublicLanding() {
+  const { org = "", slug = "" } = useParams();
+  const [params] = useSearchParams();
+  const nav = useNavigate();
+  const q = useQuery({ queryKey: ["public-lp", org, slug], queryFn: () => apiGet<PL>(`/public/landing/${org}/${slug}`), retry: false, staleTime: Infinity });
+  const [open, setOpen] = useState(false);
+  const [choice, setChoice] = useState<{ employee_id?: string; image_id?: string }>({});
+  const [form, setForm] = useState({ country_code: "+91", phone: "", name: "" });
+  const [challenge, setChallenge] = useState<StartChatOut | null>(null);
+  const [code, setCode] = useState("");
+  const [consent, setConsent] = useState<boolean | null>(() => { const v = localStorage.getItem("pixel-consent"); return v === null ? null : v === "1"; });
+  const [pixelLog, setPixelLog] = useState<string[]>([]);
+  const fired = useRef(new Set<string>());
+  const utm = params.get("utm_source") || params.get("utm_campaign") || "";
+
+  // MOCKED Meta Pixel: events fire once, only with consent, and never include phone numbers or chat content.
+  const fire = (ev: string) => {
+    if (!q.data?.page.pixel_id || !consent || fired.current.has(ev)) return;
+    fired.current.add(ev);
+    const line = `${ev} → pixel ${q.data.page.pixel_id}${utm ? ` · utm=${utm}` : ""}`;
+    console.info("[Meta Pixel MOCKED]", line);
+    setPixelLog((l) => [...l, line]);
+  };
+  useEffect(() => { if (q.data) fire("PageView"); }, [q.data, consent]); // eslint-disable-line
+
+  const finish = (r: StartChatOut) => {
+    if (r.status === "verification_required") { setChallenge(r); return; }
+    fire("Lead"); fire("Contact");
+    beginSession();
+    nav(`/chat/${r.conversation_id}`);
+  };
+  const start = useMutation({
+    mutationFn: () => apiPost<StartChatOut>(`/public/landing/${org}/${slug}/start`, { ...form, phone: form.phone.replace(/\D/g, ""), ...choice }),
+    onSuccess: finish, onError: toastErr,
+  });
+  const verify = useMutation({
+    mutationFn: () => apiPost<StartChatOut>("/public/verify", { challenge_id: challenge?.challenge_id, code }),
+    onSuccess: (r) => { toast.success("Number verified — restoring your conversation"); finish(r); }, onError: toastErr,
+  });
+
+  if (q.isLoading) return <div className="mx-auto max-w-xl space-y-4 p-6"><Skeleton className="h-24" /><Skeleton className="h-64" /></div>;
+  if (q.isError || !q.data) return <div className="mx-auto max-w-lg p-10"><EmptyState title="Page not available" text="This landing page doesn't exist or isn't published yet." /></div>;
+  const { page, org: o, employees } = q.data;
+  const phoneOk = /^\d{6,14}$/.test(form.phone.replace(/\D/g, ""));
+  const nameOk = form.name.trim().length >= 2;
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-5xl">
+        <LandingRender page={page} orgName={o.name} employees={employees} onChat={(employee_id, image_id) => { setChoice({ employee_id, image_id }); setChallenge(null); setOpen(true); }} />
+        <p className="pb-6 text-center text-[11px] text-slate-400">Powered by talksme.in OmniChat · {o.domain ? `${o.domain}/${page.slug}` : `/p/${o.slug}/${page.slug}`}</p>
+      </div>
+      {page.pixel_id && consent === null && (
+        <div className="fixed inset-x-3 bottom-3 z-40 mx-auto flex max-w-xl flex-col gap-2 rounded-2xl border bg-white p-4 text-sm text-slate-700 shadow-xl sm:flex-row sm:items-center" data-testid="pixel-consent-banner">
+          <span className="flex-1">We use a marketing pixel to measure visits. No chat content or phone numbers are shared.</span>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => { localStorage.setItem("pixel-consent", "0"); setConsent(false); }} data-testid="pixel-consent-decline">Decline</Button>
+            <Button size="sm" onClick={() => { localStorage.setItem("pixel-consent", "1"); setConsent(true); }} data-testid="pixel-consent-accept">Allow</Button>
+          </div>
+        </div>
+      )}
+      {pixelLog.length > 0 && (
+        <div className="fixed right-3 top-3 z-30 max-w-xs rounded-xl border bg-white/90 p-2 text-[11px] text-slate-600 shadow backdrop-blur" data-testid="pixel-event-log">
+          <MockBadge label="Meta Pixel mocked" />{pixelLog.map((l) => <p key={l}>{l}</p>)}
+        </div>
+      )}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md" data-testid="onboarding-dialog">
+          {!challenge ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Start your chat with {o.name}</DialogTitle>
+                <DialogDescription>Enter your WhatsApp number and name. We don't verify WhatsApp ownership at this step.</DialogDescription>
+              </DialogHeader>
+              <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (phoneOk && nameOk) start.mutate(); }}>
+                <div className="space-y-1">
+                  <Label>WhatsApp number</Label>
+                  <div className="flex gap-2">
+                    <Select value={form.country_code} onValueChange={(v: string) => setForm({ ...form, country_code: v })}>
+                      <SelectTrigger className="w-28" data-testid="onboarding-country-select"><SelectValue /></SelectTrigger>
+                      <SelectContent>{CODES.map(([c, n]) => <SelectItem key={c} value={c}>{c} {n}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Input inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="98765 43210" data-testid="onboarding-phone-input" />
+                  </div>
+                  {form.phone && !phoneOk && <p className="text-xs text-destructive" data-testid="onboarding-phone-error">Enter 6–14 digits</p>}
+                </div>
+                <div className="space-y-1">
+                  <Label>Your name</Label>
+                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Rahul" data-testid="onboarding-name-input" />
+                </div>
+                <DialogFooter><Button type="submit" className="w-full" disabled={!phoneOk || !nameOk || start.isPending} data-testid="onboarding-submit-button">{start.isPending ? "Connecting…" : "Continue to chat"}</Button></DialogFooter>
+              </form>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Verify it's you</DialogTitle>
+                <DialogDescription>This number already has conversations. To protect them, enter the 6-digit code we sent to {form.country_code} {form.phone}.</DialogDescription>
+              </DialogHeader>
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs" data-testid="onboarding-mock-otp">
+                <MockBadge label="MOCKED SMS" /> Preview code: <b className="font-mono text-sm">{challenge.mock_code}</b>
+              </div>
+              <Input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="••••••" className="text-center font-mono text-lg tracking-[0.5em]" data-testid="onboarding-otp-input" />
+              <DialogFooter><Button className="w-full" disabled={code.length !== 6 || verify.isPending} onClick={() => verify.mutate()} data-testid="onboarding-verify-button">Verify & continue</Button></DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
