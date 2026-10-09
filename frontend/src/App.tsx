@@ -17,6 +17,7 @@ import {
   SuperAdmins, SuperAnalytics, SuperAuditLogs, SuperDashboard, SuperDomains, SuperOrganizations, SuperSettings, SuperSubscriptions,
 } from "@/pages/SuperAdminPages";
 import { SuperCustomers } from "@/pages/SuperCustomers";
+import { SuperCompare, SuperSearch } from "@/pages/SuperAuditTools";
 
 function NotFound() {
   return (
@@ -69,6 +70,8 @@ export default function App() {
         <Route index element={<SuperDashboard />} />
         <Route path="organizations" element={<SuperOrganizations />} />
         <Route path="customers" element={<SuperCustomers />} />
+        <Route path="search" element={<SuperSearch />} />
+        <Route path="employee-compare" element={<SuperCompare />} />
         <Route path="admins" element={<SuperAdmins />} />
         <Route path="subscriptions" element={<SuperSubscriptions />} />
         <Route path="domains" element={<SuperDomains />} />

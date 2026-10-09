@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, FileText, MessageSquare, ShieldAlert, Users } from "lucide-react";
+import { Eye, FileSpreadsheet, FileText, MessageSquare, Radio, ShieldAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Avatar, EmptyState, ErrorState, PageHeader, Pager, SkeletonGrid, SortHead, StatCard, StatusBadge, useTable } from "@/components/common";
 import { apiGet } from "@/lib/api";
+import { isTyping, onRealtime, watching, wsSend } from "@/lib/realtime";
 import { dateTime, money, timeAgo } from "@/lib/hooks";
 import type { Message, OrgRow, SACustomerDetail, SACustomerRow, SAEmployee } from "@/lib/types";
 
@@ -26,10 +27,33 @@ function Field({ label, value, testid }: { label: string; value: React.ReactNode
 
 function Transcript({ convId }: { convId: string }) {
   const q = useQuery({ queryKey: ["sa-transcript", convId], queryFn: () => apiGet<Message[]>(`/superadmin/conversations/${convId}/messages`) });
+  const [typing, setTyping] = useState(false);
+  const [, setTick] = useState(0);
+  const refetch = q.refetch;
+  useEffect(() => {
+    // Silent live watch: the server streams this conversation's events to us; participants are never notified.
+    watching.add(convId);
+    const watch = () => wsSend({ type: "watch", conversation_id: convId });
+    watch();
+    const t = setInterval(() => { watch(); setTyping(isTyping(convId)); setTick((n) => n + 1); }, 2000);
+    const off = onRealtime((e) => {
+      if (e.conversation_id !== convId) return;
+      if (e.type === "message") refetch();
+      if (e.type === "typing") setTyping(true);
+    });
+    return () => { off(); clearInterval(t); watching.delete(convId); wsSend({ type: "unwatch", conversation_id: convId }); };
+  }, [convId, refetch]);
+  const live = (
+    <div className="mb-2 flex items-center justify-between text-xs">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2 py-0.5 font-semibold text-red-600" data-testid="sa-live-badge"><Radio className="h-3 w-3 animate-pulse" /> LIVE · silent watch</span>
+      <span className="text-muted-foreground" data-testid="sa-live-typing">{typing ? "Someone is typing…" : "New messages appear instantly"}</span>
+    </div>
+  );
   if (q.isLoading) return <SkeletonGrid n={2} />;
   if (q.isError) return <ErrorState onRetry={() => q.refetch()} />;
-  if (!q.data?.length) return <EmptyState title="No messages yet" />;
+  if (!q.data?.length) return <>{live}<EmptyState title="No messages yet" /></>;
   return (
+    <>{live}
     <div className="max-h-[60vh] space-y-2 overflow-y-auto rounded-xl border bg-muted/20 p-3" data-testid="sa-transcript">
       {q.data.map((m) => {
         const mine = m.sender_role !== "customer";
@@ -51,17 +75,29 @@ function Transcript({ convId }: { convId: string }) {
         );
       })}
     </div>
+    </>
   );
 }
 
-function CustomerSheet({ id, onClose }: { id: string; onClose: () => void }) {
+export function ExportButtons({ org, employee, label = "Export" }: { org?: string; employee?: string; label?: string }) {
+  const qs = (fmt: string) => `/api/superadmin/export?${new URLSearchParams({ fmt, ...(org && { org_id: org }), ...(employee && { employee_id: employee }) })}`;
+  return (
+    <div className="flex items-center gap-2">
+      {label && <span className="text-xs text-muted-foreground">{label}:</span>}
+      <Button size="sm" variant="outline" render={<a href={qs("xlsx")} download data-testid="sa-export-xlsx" />}><FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel</Button>
+      <Button size="sm" variant="outline" render={<a href={qs("pdf")} download data-testid="sa-export-pdf" />}><FileText className="h-4 w-4 text-red-600" /> PDF</Button>
+    </div>
+  );
+}
+
+export function CustomerSheet({ id, onClose, initialConv }: { id: string; onClose: () => void; initialConv?: string }) {
   const q = useQuery({ queryKey: ["sa-customer", id], queryFn: () => apiGet<SACustomerDetail>(`/superadmin/customers/${id}`) });
-  const [conv, setConv] = useState<string | null>(null);
+  const [conv, setConv] = useState<string | null>(initialConv ?? null);
   const c = q.data?.customer;
   const activeConv = conv ?? q.data?.conversations[0]?.id ?? null;
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-3xl" data-testid="sa-customer-sheet">
+      <SheetContent className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-3xl" data-testid="sa-customer-sheet">
         <SheetTitle className="sr-only">Customer details</SheetTitle>
         {q.isLoading && <div className="p-6"><SkeletonGrid /></div>}
         {q.isError && <ErrorState onRetry={() => q.refetch()} />}
@@ -159,6 +195,7 @@ export function SuperCustomers() {
           <SelectContent><SelectItem value={ALL}>All employees</SelectItem>{emps.data?.map((e) => <SelectItem key={e.id} value={e.id}>{e.name} · {e.org_name}</SelectItem>)}</SelectContent>
         </Select>
         {(org !== ALL || emp !== ALL) && <Button variant="ghost" size="sm" onClick={() => setSp(new URLSearchParams())} data-testid="sa-filter-clear">Clear filters</Button>}
+        <div className="ml-auto"><ExportButtons org={org !== ALL ? org : undefined} employee={emp !== ALL ? emp : undefined} label={empName ? `Export ${empName}'s customers & chats` : "Export customers & chats"} /></div>
       </div>
 
       <div className="mb-6 rounded-2xl border bg-card">

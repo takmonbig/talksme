@@ -36,3 +36,9 @@ WebRTC calls (state simulation + call log), payments/webhooks, push notification
 - Customer sheet: every profile field, labels, notes, follow-ups, deposit list, all conversations, plus the full read-only chat transcript (including messages a participant deleted only for themselves).
 - APIs (superadmin only, 403 for other roles): GET /api/superadmin/employees?org_id, GET /api/superadmin/customers?org_id&employee_id, GET /api/superadmin/customers/{id}, GET /api/superadmin/conversations/{id}/messages. Each call writes an audit log entry (sa.customers_listed / sa.customer_viewed / sa.transcript_viewed).
 - Entry points: sidebar "Customer explorer", and "Customers & chats" on each employee row in the org details dialog.
+
+## Super Admin audit tools
+- Export: GET /api/superadmin/export?fmt=xlsx|pdf&org_id&employee_id. Excel has 3 sheets (Customers, Chat history, Deposits); the PDF has a customer table, then each conversation's transcript, then deposits. Buttons appear on the Customer explorer and Employee comparison pages. Audited (sa.export_*).
+- Chat search (/superadmin/search): GET /api/superadmin/search?q (min 2 chars)&org_id. Text matches are case-insensitive; phone matches need 4+ digits. "Open chat" opens the customer sheet on that conversation. Audited (sa.chat_search).
+- Employee comparison (/superadmin/employee-compare): GET /api/superadmin/employee-compare?org_id. Per employee: customers, chats, messages sent, avg reply minutes (customer message → next employee reply), conversion %, deposits, target progress.
+- Live watch: while a transcript is open, the Super Admin's WebSocket sends {type:"watch"} (repeated every 2s, idempotent) and the hub adds them to hub.watchers[conversation_id]. publish() also delivers message/typing events to watchers. Participants are never told. The first watch is audited (sa.live_watch_started); an "unwatch" is sent when the transcript closes.

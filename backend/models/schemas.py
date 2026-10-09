@@ -616,3 +616,38 @@ class SACustomerDetail(Base):
     customer: SACustomerRow
     conversations: list[SAConversation]
     deposits: list[Deposit]
+
+
+class SACompareRow(Base):
+    id: str
+    name: str
+    email: str
+    org_id: str
+    org_name: str = ""
+    avatar: str = ""
+    active: bool = True
+    customers: int = 0
+    conversations: int = 0
+    messages_sent: int = 0
+    avg_reply_minutes: Optional[float] = None
+    converted: int = 0
+    conversion_rate: float = 0
+    deposits_total: float = 0
+    deposit_count: int = 0
+    target: float = 0
+
+
+class SASearchHit(Base):
+    kind: Literal["message", "phone"]
+    message_id: Optional[str] = None
+    conversation_id: str
+    customer_id: str
+    customer_name: str
+    customer_phone: str
+    employee_name: str = ""
+    org_id: str
+    org_name: str = ""
+    sender_name: str = ""
+    sender_role: str = ""
+    text: str = ""
+    created_at: str

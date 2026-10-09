@@ -36,6 +36,16 @@ async def ws_endpoint(ws: WebSocket):
     try:
         while True:
             msg = await ws.receive_json()
+            if user["role"] == "superadmin" and msg.get("type") in ("watch", "unwatch"):
+                cid = str(msg.get("conversation_id") or "")
+                if msg["type"] == "unwatch":
+                    hub.watchers[cid].discard(user["id"])
+                elif cid not in hub.watchers or user["id"] not in hub.watchers[cid]:
+                    c = await db.conversations.find_one({"id": cid}, {"_id": 0, "org_id": 1, "customer_name": 1, "employee_name": 1})
+                    if c:
+                        hub.watchers[cid].add(user["id"])
+                        await audit(user, "sa.live_watch_started", f"conversation:{cid} {c.get('customer_name')} <> {c.get('employee_name') or 'queue'}", c["org_id"])
+                continue
             c = await db.conversations.find_one({"id": msg.get("conversation_id")}, {"_id": 0})
             if not c or not can_access(user, c):
                 continue

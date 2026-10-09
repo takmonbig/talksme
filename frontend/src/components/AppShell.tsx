@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   BarChart3, Building2, CreditCard, FileClock, Globe, Inbox, LayoutDashboard, LayoutTemplate, LogOut, Megaphone, Menu,
-  MessagesSquare, RotateCcw, Settings, ShieldCheck, Users, Wallet, Contact, Layers,
+  MessagesSquare, RotateCcw, Search, Settings, ShieldCheck, Users, Wallet, Contact, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -42,6 +42,8 @@ const NAV: Record<Exclude<Role, "customer">, NavItem[]> = {
     { to: "/superadmin", label: "Command center", icon: LayoutDashboard, end: true },
     { to: "/superadmin/organizations", label: "Organizations", icon: Building2 },
     { to: "/superadmin/customers", label: "Customer explorer", icon: Contact },
+    { to: "/superadmin/search", label: "Chat search", icon: Search },
+    { to: "/superadmin/employee-compare", label: "Employee comparison", icon: BarChart3 },
     { to: "/superadmin/admins", label: "Admins", icon: ShieldCheck },
     { to: "/superadmin/subscriptions", label: "Subscriptions", icon: Layers },
     { to: "/superadmin/domains", label: "Domains", icon: Globe },

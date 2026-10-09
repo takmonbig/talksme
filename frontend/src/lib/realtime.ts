@@ -10,6 +10,8 @@ const listeners = new Set<Listener>();
 export const onRealtime = (l: Listener) => { listeners.add(l); return () => { listeners.delete(l); }; };
 export const wsSend = (msg: object) => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg)); };
 const typingAt = new Map<string, number>();
+/** Conversations a Super Admin is silently watching (no notifications, participants are never told). */
+export const watching = new Set<string>();
 export const isTyping = (cid: string) => Date.now() - (typingAt.get(cid) ?? 0) < 4000;
 
 /** One authenticated WebSocket per tab; reconnects with backoff. Messages invalidate the right queries instantly. */
@@ -30,7 +32,7 @@ export function useRealtime(enabled: boolean) {
           qc.invalidateQueries({ queryKey: ["messages", e.conversation_id] });
           qc.invalidateQueries({ queryKey: ["conversations"] });
           qc.invalidateQueries({ queryKey: ["conversation", e.conversation_id] });
-          if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+          if (!watching.has(e.conversation_id) && document.hidden && "Notification" in window && Notification.permission === "granted") {
             apiGet<{ customer_name: string; org_name: string; last_message: string }>(`/conversations/${e.conversation_id}`)
               .then((c) => new Notification(c.org_name, { body: c.last_message, icon: "/apple-touch-icon.png" })).catch(() => undefined);
           }

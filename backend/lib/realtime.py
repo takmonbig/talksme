@@ -9,12 +9,17 @@ from lib.db import db
 class Hub:
     def __init__(self) -> None:
         self.conns: dict[str, set[WebSocket]] = defaultdict(set)
+        # Super Admin silent watchers: conversation_id -> {superadmin user ids}. Participants are never notified.
+        self.watchers: dict[str, set[str]] = defaultdict(set)
 
     def add(self, uid: str, ws: WebSocket) -> None:
         self.conns[uid].add(ws)
 
     def remove(self, uid: str, ws: WebSocket) -> None:
         self.conns[uid].discard(ws)
+        if not self.conns[uid]:
+            for w in self.watchers.values():
+                w.discard(uid)
 
     def online(self, uid: str) -> bool:
         return bool(self.conns.get(uid))
@@ -42,4 +47,4 @@ async def audience(c: dict) -> set[str]:
 
 
 async def publish(c: dict, event: dict, exclude: str | None = None) -> None:
-    await hub.send(await audience(c) - {exclude}, {"conversation_id": c["id"], **event})
+    await hub.send((await audience(c) | hub.watchers.get(c["id"], set())) - {exclude}, {"conversation_id": c["id"], **event})
