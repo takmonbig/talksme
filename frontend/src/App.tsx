@@ -1,9 +1,11 @@
+import { useEffect } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState, Logo } from "@/components/common";
 import { CallManager } from "@/components/chat/CallModal";
 import { useMe } from "@/lib/hooks";
 import { useRealtime } from "@/lib/realtime";
+import { syncPushSubscription } from "@/lib/pwa";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import PublicLanding from "@/pages/PublicLanding";
@@ -30,7 +32,8 @@ function NotFound() {
 
 function RealtimeRoot() {
   const me = useMe();
-  useRealtime(!!me.data);
+  useRealtime(me.data);
+  useEffect(() => { if (me.data) syncPushSubscription(); }, [me.data?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   return me.data && me.data.role !== "superadmin" ? <CallManager /> : null;
 }
 

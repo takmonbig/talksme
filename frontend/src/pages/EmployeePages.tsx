@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AutoMessagesCard } from "@/components/AutoMessagesCard";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,7 @@ export function EmployeeSettings() {
           </div>
           <Button className="mt-4" disabled={m.isPending || (name ?? u.name).trim().length < 2} onClick={() => m.mutate({ name: name ?? u.name, avatar: avatar ?? u.avatar })} data-testid="settings-save-profile">Save profile</Button>
         </div>
+        <AutoMessagesCard />
         <div className="space-y-4 rounded-2xl border bg-card p-5">
           <div className="flex items-center justify-between gap-3">
             <div><p className="font-semibold">Availability</p><p className="text-xs text-muted-foreground">Offline employees are skipped by round-robin and least-busy routing.</p></div>

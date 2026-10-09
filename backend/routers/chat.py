@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from lib.auth import require
 from lib.conv import get_conv, shape
 from lib.db import db
-from lib.realtime import publish
+from lib.push import push_bg
+from lib.realtime import audience, publish
 from lib.util import audit, new_id, now_iso
 from models.schemas import (AssignIn, Call, CallIn, Conversation, ConversationPatch, Message, MessageIn, Ok, ReportIn,
                             Transfer, TransferIn)
@@ -110,7 +111,15 @@ async def send_message(cid: str, body: MessageIn, user: dict = Depends(chat_user
         await db.customer_profiles.update_one({"id": c["customer_id"], "assigned_employee_id": None},
                                               {"$set": {"assigned_employee_id": user["id"], "assigned_employee_name": user["name"]}})
     await db.conversations.update_one({"id": cid}, upd)
-    await publish(c, {"type": "message"})
+    await publish(c, {"type": "message", "sender_id": user["id"]})
+    recipients = {c["customer_user_id"]} if side == "employee" else ({c["employee_id"]} if c.get("employee_id") else await audience(c) - {c["customer_user_id"]})
+    if side == "employee" and c["customer_user_id"] in c.get("muted_by", []):
+        recipients = set()
+    if recipients:
+        org = await db.organizations.find_one({"id": c["org_id"]}, {"_id": 0, "name": 1}) or {}
+        push_bg(recipients - {user["id"]}, {"title": user["name"] if side == "customer" else f"{user['name']} · {org.get('name', 'talksme.in')}",
+                                           "body": label[:120], "tag": f"msg-{cid}",
+                                           "url": f"/chat/{cid}" if side == "employee" else f"/employee/inbox?c={cid}"})
     if side == "customer":
         await db.customer_profiles.update_one({"id": c["customer_id"]}, {"$set": {"last_active": t}})
     return Message(**msg)

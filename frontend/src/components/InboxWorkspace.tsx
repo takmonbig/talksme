@@ -70,7 +70,7 @@ export function InboxWorkspace({ mode }: { mode: "employee" | "admin" }) {
   const open = (id: string | null) => setParams(id ? { c: id } : {});
 
   return (
-    <div className="-m-3 flex h-[calc(100vh-3.5rem)] overflow-hidden border-t bg-card sm:-m-6" data-testid="inbox-workspace">
+    <div className="-m-3 flex h-[calc(100dvh-3.5rem)] overflow-hidden border-t bg-card sm:-m-6" data-testid="inbox-workspace">
       {/* left */}
       <aside className={cn("flex w-full shrink-0 flex-col border-r md:w-80 lg:w-[340px]", active && "hidden md:flex")}>
         <div className="space-y-3 border-b p-3">

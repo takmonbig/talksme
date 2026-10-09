@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Archive, Ban, Bell, BellOff, Download, LogOut, MoreVertical, Search, Settings, ShieldAlert, WifiOff } from "lucide-react";
+import { Archive, Ban, BellOff, LogOut, MoreVertical, Search, Settings, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,12 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Avatar, EmptyState, Logo, MockBadge, Skeleton, ThemeToggle, VerifiedBadge } from "@/components/common";
+import { Avatar, EmptyState, Logo, Skeleton, ThemeToggle, VerifiedBadge } from "@/components/common";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { endSession } from "@/lib/session";
 import { timeAgo, toastErr, useMe } from "@/lib/hooks";
-import { useInstallPrompt, useOnline } from "@/lib/pwa";
+import { useOnline } from "@/lib/pwa";
+import { InstallBanner, InstallPill, NotifyBanner } from "@/components/AppBanners";
 import type { Conversation, Ok, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -36,8 +37,8 @@ function PrefsDialog({ me, open, onOpenChange }: { me: User; open: boolean; onOp
         <div className="space-y-3">
           <div className="space-y-1"><Label>Profile name</Label><Input value={name} onChange={(e) => setName(e.target.value)} data-testid="customer-name-input" /></div>
           <label className="flex items-center gap-2 text-sm"><Checkbox checked={sound} onCheckedChange={(v) => setSound(!!v)} data-testid="pref-sound-checkbox" /> In-app sound for new messages</label>
-          <label className="flex items-center gap-2 text-sm"><Checkbox checked={push} onCheckedChange={(v) => setPush(!!v)} data-testid="pref-push-checkbox" /> Push notifications <MockBadge /></label>
-          <p className="text-xs text-muted-foreground">Push delivery isn't guaranteed when the app is closed.</p>
+          <label className="flex items-center gap-2 text-sm"><Checkbox checked={push} onCheckedChange={(v) => setPush(!!v)} data-testid="pref-push-checkbox" /> Push notifications on this phone (messages & calls)</label>
+          <p className="text-xs text-muted-foreground">Delivery when the app is fully closed depends on your phone's battery settings.</p>
         </div>
         <DialogFooter><Button disabled={name.trim().length < 2 || m.isPending} onClick={() => m.mutate()} data-testid="customer-prefs-save">Save</Button></DialogFooter>
       </DialogContent>
@@ -71,13 +72,10 @@ export default function CustomerInbox() {
   const qc = useQueryClient();
   const me = useMe();
   const online = useOnline();
-  const install = useInstallPrompt();
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"all" | "unread" | "archived">("all");
   const [prefs, setPrefs] = useState(false);
   const [report, setReport] = useState(false);
-  const [howTo, setHowTo] = useState(false);
-  const [notif, setNotif] = useState<string>("Notification" in window ? Notification.permission : "denied");
   const isCustomer = me.data?.role === "customer";
   const list = useQuery({
     queryKey: ["conversations", "customer", tab, q],
@@ -110,29 +108,19 @@ export default function CustomerInbox() {
           <div className="flex items-center gap-2 border-b px-4 py-3">
             <Logo compact />
             <div className="min-w-0 flex-1"><p className="font-heading text-lg font-bold leading-tight">Chats {unreadTotal > 0 && <span className="bg-brand ml-1 rounded-full px-2 text-xs text-white" data-testid="customer-unread-total">{unreadTotal}</span>}</p><p className="truncate text-[11px] text-muted-foreground">One inbox for every business · {me.data.name}{me.data.guest && " (guest)"}</p></div>
-            <Button size="sm" className="bg-brand h-8 px-2.5 text-xs text-white" onClick={() => (install.canInstall ? install.prompt() : setHowTo(true))} data-testid="download-app-button"><Download className="h-3.5 w-3.5" /> Download App</Button>
+            <InstallPill />
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="ghost" size="icon" data-testid="customer-menu-button" />}><MoreVertical className="h-4 w-4" /></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem onClick={() => setPrefs(true)} data-testid="customer-menu-prefs"><Settings className="h-4 w-4" />Profile & notifications</DropdownMenuItem>
-                {install.canInstall && <DropdownMenuItem onClick={install.prompt} data-testid="customer-menu-install"><Download className="h-4 w-4" />Install app</DropdownMenuItem>}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => endSession("/demo")} data-testid="customer-menu-logout"><LogOut className="h-4 w-4" />Sign out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          {false && (
-            <button onClick={install.prompt} className="bg-brand-subtle mx-3 mt-3 flex items-center gap-2 rounded-xl border p-3 text-left text-xs" data-testid="pwa-install-banner">
-              <Download className="h-4 w-4 text-primary" /> Install talksme.in — one app for all your business chats.
-            </button>
-          )}
-          {notif !== "granted" && "Notification" in window && (
-            <button onClick={() => Notification.requestPermission().then((p) => { setNotif(p); if (p === "granted") toast.success("Notifications enabled"); else toast.error("Notifications blocked in browser settings"); })}
-              className="mx-3 mt-3 flex items-center gap-2 rounded-xl border border-primary/30 bg-accent p-3 text-left text-xs font-medium text-accent-foreground" data-testid="enable-notifications-banner">
-              <Bell className="h-4 w-4" /> Enable notifications to know when a business replies
-            </button>
-          )}
+          <InstallBanner testid="install-app-banner-list" />
+          <NotifyBanner who="customer" className="mt-1" />
           <div className="space-y-2 p-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search chats" className="pl-9" data-testid="customer-search-input" /></div>
             <div className="flex gap-1">
@@ -185,12 +173,6 @@ export default function CustomerInbox() {
           )}
         </main>
       </div>
-      <Dialog open={howTo} onOpenChange={setHowTo}>
-        <DialogContent data-testid="install-help-dialog">
-          <DialogHeader><DialogTitle>Install the talksme.in app</DialogTitle><DialogDescription>One app for all your business chats — no Play Store needed.</DialogDescription></DialogHeader>
-          <ol className="list-decimal space-y-2 pl-5 text-sm"><li><b>Android (Chrome):</b> tap ⋮ menu → <b>Install app</b> / Add to Home screen.</li><li><b>iPhone (Safari):</b> tap Share → <b>Add to Home Screen</b>.</li><li><b>Desktop:</b> click the install icon in the address bar.</li></ol>
-        </DialogContent>
-      </Dialog>
       <PrefsDialog me={me.data} open={prefs} onOpenChange={setPrefs} />
       {conv && <ReportDialog conv={conv} open={report} onOpenChange={setReport} />}
     </div>

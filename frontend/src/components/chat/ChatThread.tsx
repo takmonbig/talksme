@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, Skeleton } from "@/components/common";
 import { CallButton, startCall } from "@/components/chat/CallModal";
+import { InstallBanner, NotifyBanner } from "@/components/AppBanners";
 import { MAX_UPLOAD, uploadFile } from "@/lib/media";
 import { isTyping, wsSend } from "@/lib/realtime";
 import { apiGet, apiPost } from "@/lib/api";
@@ -150,6 +151,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
         {viewer !== "admin" && <CallButton disabled={!conv.calls_enabled || disabled} onClick={() => startCall({ cid: conv.id, name: peerName, avatar: viewer === "customer" ? conv.employee_avatar : undefined })} />}
         {headerExtra}
       </div>
+      {viewer === "customer" && <InstallBanner />}
 
       <div className="chat-wall min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6" data-testid="chat-messages">
         {q.isLoading && <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className={cn("h-12 w-2/3", i % 2 && "ml-auto")} />)}</div>}
@@ -193,7 +195,8 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
       ) : disabled ? (
         <div className="border-t bg-card px-4 py-3 text-center text-sm text-muted-foreground" data-testid="chat-blocked-notice">This conversation is blocked. Messaging is disabled.</div>
       ) : (
-        <div className="border-t bg-card px-2 py-2 sm:px-3">
+        <div className="shrink-0 border-t bg-card px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 sm:px-3">
+          <NotifyBanner who={viewer === "customer" ? "customer" : "employee"} compact className="mx-0" />
           {reply && (
             <div className="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-primary bg-muted px-3 py-1.5 text-xs" data-testid="chat-reply-preview">
               <span className="truncate">Replying to: {reply.text || "attachment"}</span>
@@ -242,6 +245,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
               <textarea
                 value={text} onChange={(e) => onType(e.target.value)} rows={1} placeholder="Type a message"
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
+                onFocus={(e) => { const el = e.currentTarget; setTimeout(() => { el.scrollIntoView({ block: "nearest" }); endRef.current?.scrollIntoView({ block: "end" }); }, 300); }}
                 className="max-h-32 min-h-10 flex-1 resize-none rounded-2xl border bg-background px-4 py-2.5 text-sm outline-none transition-[border-color,box-shadow] duration-150 focus:border-primary focus:ring-2 focus:ring-primary/20"
                 data-testid="chat-message-input"
               />

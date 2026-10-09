@@ -5,7 +5,10 @@ import { apiPost } from "./api";
 
 // Call after every successful login/signup.
 export function beginSession(): void {
-  queryClient.clear();
+  // Keep the ["me"] query object alive (just refetch it): app-root observers such as the realtime
+  // WebSocket + call manager stay subscribed and connect immediately, without a page reload.
+  queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== "me" });
+  queryClient.invalidateQueries({ queryKey: ["me"] });
 }
 
 // Call from every sign-out control; the hard redirect resets all in-memory state.

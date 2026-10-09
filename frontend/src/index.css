@@ -68,6 +68,11 @@
     0%, 100% { transform: scaleY(0.35); }
     50% { transform: scaleY(1); }
 }
+@keyframes wiggle {
+    0%, 60%, 100% { transform: rotate(0); }
+    10%, 30%, 50% { transform: rotate(-14deg); }
+    20%, 40% { transform: rotate(14deg); }
+}
 @keyframes rise {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }

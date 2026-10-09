@@ -5,12 +5,19 @@ import { Mic, MicOff, Phone, PhoneIncoming, PhoneOff, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Avatar } from "@/components/common";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { onRealtime, wsSend } from "@/lib/realtime";
+import { showLocalNotification } from "@/lib/pwa";
+import { startRing, stopRing } from "@/lib/sound";
 
 type Phase = "idle" | "ringing" | "incoming" | "connecting" | "connected";
 interface Peer { cid: string; name: string; avatar?: string }
-const ICE: RTCConfiguration = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
+const FALLBACK_ICE: RTCIceServer[] = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
+/** STUN + TURN relay (Metered) from the backend, so calls connect on mobile data / strict Wi-Fi too. */
+const iceConfig = async (): Promise<RTCConfiguration> => {
+  const r = await apiGet<{ ice_servers: RTCIceServer[]; turn: boolean }>("/calls/ice-servers").catch(() => null);
+  return { iceServers: r?.ice_servers?.length ? r.ice_servers : FALLBACK_ICE };
+};
 
 let startFn: ((p: Peer) => void) | null = null;
 export const startCall = (p: Peer) => startFn?.(p);
@@ -54,14 +61,19 @@ export function CallManager() {
       toast.warning("No microphone found — you can listen, but the other person won't hear you.");
       local.current = null;
     }
-    const conn = new RTCPeerConnection(ICE);
+    const conn = new RTCPeerConnection(await iceConfig());
     if (local.current) local.current.getTracks().forEach((t) => conn.addTrack(t, local.current!));
     else conn.addTransceiver("audio", { direction: "recvonly" });
     conn.onicecandidate = (e) => e.candidate && signal("ice", e.candidate.toJSON());
     conn.ontrack = (e) => { if (audio.current) audio.current.srcObject = e.streams[0]; };
+    let drop: ReturnType<typeof setTimeout> | undefined;
     conn.onconnectionstatechange = () => {
+      if (pc.current !== conn) return;
+      clearTimeout(drop);
       if (conn.connectionState === "connected") setPhase("connected");
-      if (["failed", "disconnected"].includes(conn.connectionState)) { toast.error("Call connection lost"); log("failed", st.current.secs); cleanup(); }
+      const lost = () => { if (pc.current !== conn) return; toast.error("Call connection lost"); signal("end"); log("failed", st.current.secs); cleanup(); };
+      if (conn.connectionState === "failed") lost();
+      if (conn.connectionState === "disconnected") drop = setTimeout(lost, 6000); // brief network blips recover on their own
     };
     pc.current = conn;
     return conn;
@@ -84,6 +96,7 @@ export function CallManager() {
       if (e.action === "offer") {
         if (cur.phase !== "idle") { wsSend({ type: "call", conversation_id: e.conversation_id, action: "busy" }); return; }
         caller.current = false; offer.current = e.payload as RTCSessionDescriptionInit;
+        pendingIce.current = (e.ice as RTCIceCandidateInit[] | undefined) ?? [];
         setPeer({ cid: e.conversation_id, name: e.from_name ?? "Caller", avatar: e.from_avatar }); setPhase("incoming");
         return;
       }
@@ -98,13 +111,32 @@ export function CallManager() {
       } else if (e.action === "reject" || e.action === "busy") {
         toast(e.action === "busy" ? `${cur.peer.name} is on another call` : `${cur.peer.name} declined the call`); log(e.action === "busy" ? "busy" : "rejected"); cleanup();
       } else if (e.action === "end") {
-        toast("Call ended"); log(cur.phase === "connected" ? "completed" : "missed", cur.secs); cleanup();
+        toast(cur.phase === "incoming" ? `Missed call from ${cur.peer.name}` : "Call ended"); log(cur.phase === "connected" ? "completed" : cur.phase === "connecting" ? "failed" : "missed", cur.secs); cleanup();
       }
     });
     return () => { off(); startFn = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Ringtone / ringback + system notification for incoming calls (so a backgrounded tab still alerts).
   useEffect(() => {
+    if (phase === "incoming") {
+      startRing("incoming");
+      const p = st.current.peer;
+      if (p && document.hidden) showLocalNotification(`📞 Incoming call · ${p.name}`, "Tap to answer the audio call", location.pathname.startsWith("/employee") ? `/employee/inbox?c=${p.cid}` : `/chat/${p.cid}`, `call-${p.cid}`, true);
+    } else if (phase === "ringing") startRing("outgoing");
+    else stopRing();
+    return () => stopRing();
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase === "connecting") {
+      const t = setTimeout(() => {
+        if (st.current.phase !== "connecting") return;
+        toast.error("Couldn't connect the audio. The network may be blocking calls, so please try again on Wi-Fi or mobile data.");
+        signal("end"); log("failed"); cleanup();
+      }, 25000);
+      return () => clearTimeout(t);
+    }
     if (phase === "connected") { const t = setInterval(() => setSecs((s) => s + 1), 1000); return () => clearInterval(t); }
     if (phase === "ringing" || phase === "incoming") {
       const t = setTimeout(() => { if (st.current.phase === phase) { signal("end"); if (phase === "ringing") toast("No answer"); log("missed"); cleanup(); } }, 35000);
@@ -126,7 +158,7 @@ export function CallManager() {
       signal("answer", a);
     } catch { signal("reject"); cleanup(); }
   };
-  const hangup = () => { signal(phase === "incoming" ? "reject" : "end"); log(phase === "connected" ? "completed" : "missed", secs); cleanup(); };
+  const hangup = () => { signal(phase === "incoming" ? "reject" : "end"); log(phase === "connected" ? "completed" : phase === "connecting" ? "failed" : "missed", secs); cleanup(); };
   const fmt = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 
   return (

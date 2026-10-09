@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from lib.auth import current_user, optional_user, require, set_session
 from lib.conv import can_access
 from lib.db import db
+from lib.push import push_bg
 from lib.realtime import hub, publish
 from lib.util import audit, iso, new_id, now, now_iso
 from models.schemas import Ok, StartChatOut, User, VerifyIn
@@ -34,8 +35,13 @@ async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     hub.add(user["id"], ws)
     try:
+        for ev in hub.ringing_for(user["id"]):  # opened the app from a call notification -> still ring
+            await ws.send_json(ev)
         while True:
             msg = await ws.receive_json()
+            if msg.get("type") == "visibility":
+                (hub.visible.add if msg.get("visible") else hub.visible.discard)(ws)
+                continue
             if user["role"] == "superadmin" and msg.get("type") in ("watch", "unwatch"):
                 cid = str(msg.get("conversation_id") or "")
                 if msg["type"] == "unwatch":
@@ -57,8 +63,19 @@ async def ws_endpoint(ws: WebSocket):
                     continue
                 peer = c.get("employee_id") if user["role"] == "customer" else c["customer_user_id"]
                 if peer:
-                    await hub.send({peer}, {"type": "call", "conversation_id": c["id"], "action": msg.get("action"),
-                                            "payload": msg.get("payload"), "from_name": user["name"], "from_avatar": user.get("avatar", "")})
+                    action = msg.get("action")
+                    ev = {"type": "call", "conversation_id": c["id"], "action": action, "payload": msg.get("payload"),
+                          "from_name": user["name"], "from_avatar": user.get("avatar", "")}
+                    if action == "offer":
+                        hub.pending_calls[c["id"]] = (peer, ev, time.time())
+                        url = f"/chat/{c['id']}" if user["role"] != "customer" else f"/employee/inbox?c={c['id']}"
+                        push_bg({peer}, {"title": f"📞 Incoming call · {user['name']}", "body": "Tap to answer the audio call",
+                                         "url": url, "tag": f"call-{c['id']}", "call": True}, only_if_not_visible=False)
+                    elif action in ("answer", "reject", "end", "busy"):
+                        hub.pending_calls.pop(c["id"], None)
+                    elif action == "ice" and c["id"] in hub.pending_calls:
+                        hub.pending_calls[c["id"]][1].setdefault("ice", []).append(msg.get("payload"))
+                    await hub.send({peer}, ev)
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:

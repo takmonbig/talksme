@@ -99,3 +99,6 @@ export interface SAConversation { id: string; employee_id: string | null; employ
 export interface SACustomerDetail { customer: SACustomerRow; conversations: SAConversation[]; deposits: Deposit[] }
 export interface SACompareRow { id: string; name: string; email: string; org_id: string; org_name: string; avatar: string; active: boolean; customers: number; conversations: number; messages_sent: number; avg_reply_minutes: number | null; converted: number; conversion_rate: number; deposits_total: number; deposit_count: number; target: number }
 export interface SASearchHit { kind: "message" | "phone"; message_id: string | null; conversation_id: string; customer_id: string; customer_name: string; customer_phone: string; employee_name: string; org_id: string; org_name: string; sender_name: string; sender_role: string; text: string; created_at: string }
+// Employee auto messages (mirrors AutoMsg / AutoMessages)
+export interface AutoMsg { id: string; text: string; enabled: boolean }
+export interface AutoMessages { enabled: boolean; welcome: AutoMsg[]; return_enabled: boolean; return_text: string }

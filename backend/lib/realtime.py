@@ -1,4 +1,5 @@
 """In-process WebSocket hub: instant message/typing delivery + WebRTC call signaling relay."""
+import time
 from collections import defaultdict
 
 from fastapi import WebSocket
@@ -11,15 +12,28 @@ class Hub:
         self.conns: dict[str, set[WebSocket]] = defaultdict(set)
         # Super Admin silent watchers: conversation_id -> {superadmin user ids}. Participants are never notified.
         self.watchers: dict[str, set[str]] = defaultdict(set)
+        self.visible: set[WebSocket] = set()  # sockets whose tab/app is currently in the foreground
+        # Ringing calls (conversation_id -> (callee uid, event, started)) so a callee who opens the app from a push still gets the offer.
+        self.pending_calls: dict[str, tuple[str, dict, float]] = {}
 
     def add(self, uid: str, ws: WebSocket) -> None:
         self.conns[uid].add(ws)
 
     def remove(self, uid: str, ws: WebSocket) -> None:
         self.conns[uid].discard(ws)
+        self.visible.discard(ws)
         if not self.conns[uid]:
             for w in self.watchers.values():
                 w.discard(uid)
+
+    def visible_now(self, uid: str) -> bool:
+        return any(ws in self.visible for ws in self.conns.get(uid, ()))
+
+    def ringing_for(self, uid: str) -> list[dict]:
+        now = time.time()
+        for cid in [k for k, v in self.pending_calls.items() if now - v[2] > 40]:
+            self.pending_calls.pop(cid, None)
+        return [ev for callee, ev, _ in self.pending_calls.values() if callee == uid]
 
     def online(self, uid: str) -> bool:
         return bool(self.conns.get(uid))

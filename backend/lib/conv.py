@@ -104,6 +104,7 @@ async def open_conversation(user: dict, lp: dict, preferred: Optional[str]) -> s
     existing = await db.conversations.find_one({"customer_id": prof["id"], "landing_page_id": lp["id"]}, {"_id": 0})
     if existing:
         await db.conversations.update_one({"id": existing["id"]}, {"$pull": {"archived_by": user["id"]}})
+        await send_auto_messages(existing, "return")
         return existing["id"]
     emp_id = await pick_employee(lp, preferred or prof.get("assigned_employee_id"))
     emp = await db.users.find_one({"id": emp_id}, {"_id": 0, "name": 1}) if emp_id else None
@@ -125,5 +126,39 @@ async def open_conversation(user: dict, lp: dict, preferred: Optional[str]) -> s
                                       "text": f"Connected to {emp['name']}" if emp else "You're in the queue — the next available associate will reply shortly.",
                                       "attachment": None, "reply_to": None, "reply_preview": "", "status": "read",
                                       "created_at": t, "idempotency_key": new_id(), "hidden_for": []})
+        await send_auto_messages(conv, "welcome")
     doc = await db.conversations.find_one({"customer_id": prof["id"], "landing_page_id": lp["id"]}, {"_id": 0, "id": 1})
     return doc["id"]
+
+
+async def send_auto_messages(c: dict, kind: str) -> None:
+    """Employee's pre-made messages. 'welcome' on a new chat; 'return' when a customer comes back after 12h+ (once per 12h)."""
+    if not c.get("employee_id"):
+        return
+    emp = await db.users.find_one({"id": c["employee_id"]}, {"_id": 0, "id": 1, "name": 1, "auto_messages": 1, "active": 1})
+    cfg = (emp or {}).get("auto_messages") or {}
+    if not emp or not emp.get("active", True) or not cfg.get("enabled", True):
+        return
+    if kind == "welcome":
+        texts = [m["text"] for m in cfg.get("welcome", []) if m.get("enabled", True) and m.get("text", "").strip()]
+    else:
+        if not cfg.get("return_enabled") or not cfg.get("return_text", "").strip():
+            return
+        if (c.get("last_return_auto_at") or "") > iso(now() - timedelta(hours=12)) or c.get("last_message_at", "") > iso(now() - timedelta(hours=12)):
+            return
+        texts = [cfg["return_text"]]
+    if not texts:
+        return
+    org = await db.organizations.find_one({"id": c["org_id"]}, {"_id": 0, "name": 1}) or {}
+    first = (c.get("customer_name") or "").split(" ")[0]
+    base = now()
+    for i, txt in enumerate(texts):
+        body = txt.replace("{name}", first).replace("{org}", org.get("name", "")).replace("{employee}", emp["name"]).strip()
+        await db.messages.insert_one({"id": new_id(), "conversation_id": c["id"], "org_id": c["org_id"], "sender_role": "employee",
+                                      "sender_id": emp["id"], "sender_name": emp["name"], "text": body, "attachment": None, "auto": True,
+                                      "reply_to": None, "reply_preview": "", "status": "sent", "created_at": iso(base + timedelta(milliseconds=50 * (i + 1))),
+                                      "idempotency_key": new_id(), "hidden_for": []})
+    upd: dict = {"last_message": body[:120], "last_message_at": iso(base + timedelta(milliseconds=50 * len(texts)))}
+    if kind == "return":
+        upd["last_return_auto_at"] = upd["last_message_at"]
+    await db.conversations.update_one({"id": c["id"]}, {"$set": upd, "$inc": {"unread_customer": len(texts)}})

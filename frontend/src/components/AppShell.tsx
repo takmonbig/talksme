@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from "react";
+import { NotifyBanner } from "@/components/AppBanners";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -131,6 +132,7 @@ export function AppShell({ role }: { role: Exclude<Role, "customer"> }) {
   const me = useMe();
   const org = useStaffOrg(role !== "superadmin" && !!me.data);
   const [open, setOpen] = useState(false);
+  const loc = useLocation();
   const items = NAV[role].filter((i) => !i.feature || org.data?.features?.[i.feature] !== false);
   const brandStyle = org.data ? ({ "--primary": org.data.primary_color, "--sidebar-accent-foreground": org.data.primary_color } as CSSProperties) : undefined;
   const roleLabel = { employee: "Employee", admin: "Admin", superadmin: "Super Admin" }[role];
@@ -175,7 +177,10 @@ export function AppShell({ role }: { role: Exclude<Role, "customer"> }) {
               <Button variant="ghost" size="icon" onClick={() => endSession("/demo")} aria-label="Sign out" data-testid="logout-button"><LogOut className="h-4 w-4" /></Button>
             </div>
           </header>
-          <main className="min-w-0 flex-1 p-3 sm:p-6"><Outlet /></main>
+          <main className="min-w-0 flex-1 p-3 sm:p-6">
+            {role !== "superadmin" && !/\/(inbox|conversations)$/.test(loc.pathname) && <NotifyBanner who="employee" className="mx-0 mb-4" />}
+            <Outlet />
+          </main>
         </div>
       </div>
     </RequireRole>

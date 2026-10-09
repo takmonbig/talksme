@@ -38,6 +38,12 @@ def avatar(n: int) -> str:
     return f"https://i.pravatar.cc/200?img={n}"
 
 
+DEFAULT_AUTO = {"enabled": True, "return_enabled": True, "welcome": [
+    {"id": "auto-1", "enabled": True, "text": "Hi {name}! 👋 I'm {employee} from {org}. Thanks for reaching out, how can I help you today?"},
+    {"id": "auto-2", "enabled": True, "text": "Tip: install the talksme.in app and turn on notifications so you never miss my reply 🔔"}],
+    "return_text": "Welcome back {name}! 😊 Great to see you again. Let me know what you need."}
+
+
 async def reset_demo() -> None:
     rnd = random.Random(42)
     t0 = now()
@@ -95,6 +101,8 @@ async def reset_demo() -> None:
     employees = [user(e, n, "employee", o, title=t, avatar=avatar(a), status=s, verified=i != 3,
                       target=150000 if o == "org-talksme" else 80000)
                  for i, (e, n, o, t, a, s) in enumerate(emp_specs)]
+    for e in employees:
+        e["auto_messages"] = DEFAULT_AUTO
     admins = [user("admin@talksme.in", "Ananya Gupta", "admin", "org-talksme", avatar=avatar(32), title="Org Admin"),
               user("admin@aurora.demo", "Dev Arora", "admin", "org-aurora", avatar=avatar(52), title="Org Admin"),
               user("admin@nimbus.demo", "Isha Kulkarni", "admin", "org-nimbus", avatar=avatar(20), title="Org Admin")]

@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, MockBadge, Skeleton } from "@/components/common";
 import { LandingRender } from "@/components/LandingRender";
+import { InstallBanner } from "@/components/AppBanners";
+import { appInstalled, isStandalone } from "@/lib/pwa";
 import { apiGet, apiPost } from "@/lib/api";
 import { beginSession } from "@/lib/session";
 import { toastErr } from "@/lib/hooks";
@@ -28,6 +30,7 @@ export default function PublicLanding() {
   const [code, setCode] = useState("");
   const [consent, setConsent] = useState<boolean | null>(() => { const v = localStorage.getItem("pixel-consent"); return v === null ? null : v === "1"; });
   const [pixelLog, setPixelLog] = useState<string[]>([]);
+  const [inApp, setInApp] = useState<string | null>(null);
   const fired = useRef(new Set<string>());
   const utm = params.get("utm_source") || params.get("utm_campaign") || "";
 
@@ -45,7 +48,9 @@ export default function PublicLanding() {
     if (r.status === "verification_required") { setChallenge(r); return; }
     fire("Lead"); fire("Contact");
     beginSession();
-    nav(`/chat/${r.conversation_id}`);
+    const url = `/chat/${r.conversation_id}`;
+    // App installed but we're in the browser: offer to continue in the app; otherwise go straight into the chat.
+    appInstalled().then((yes) => { if (yes && !isStandalone()) { setOpen(false); setInApp(url); } else nav(url); });
   };
   const start = useMutation({
     mutationFn: () => apiPost<StartChatOut>(`/public/landing/${org}/${slug}/start`, { ...form, phone: form.phone.replace(/\D/g, ""), ...choice }),
@@ -64,6 +69,7 @@ export default function PublicLanding() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <div className="sticky top-0 z-30 bg-slate-50/90 backdrop-blur"><div className="mx-auto max-w-5xl"><InstallBanner /></div></div>
       <div className="mx-auto max-w-5xl">
         <LandingRender page={page} orgName={o.name} employees={employees} onChat={(employee_id, image_id) => { setChoice({ employee_id, image_id }); setChallenge(null); setOpen(true); }} />
         <p className="pb-6 text-center text-[11px] text-slate-400">Powered by talksme.in OmniChat · {o.domain ? `${o.domain}/${page.slug}` : `/p/${o.slug}/${page.slug}`}</p>
@@ -82,14 +88,30 @@ export default function PublicLanding() {
           <MockBadge label="Meta Pixel mocked" />{pixelLog.map((l) => <p key={l}>{l}</p>)}
         </div>
       )}
+      <Dialog open={!!inApp} onOpenChange={(o) => { if (!o && inApp) nav(inApp); }}>
+        <DialogContent className="sm:max-w-sm" data-testid="open-in-app-dialog">
+          <DialogHeader>
+            <DialogTitle>You have the talksme app 🎉</DialogTitle>
+            <DialogDescription>Your chat is ready. Continue in the installed app for notifications and calls, or keep chatting here.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button className="w-full" onClick={() => { if (inApp) { window.open(inApp, "_blank", "noopener"); nav(inApp); } }} data-testid="open-in-app-button">Open in app</Button>
+            <Button variant="outline" className="w-full" onClick={() => inApp && nav(inApp)} data-testid="continue-in-browser-button">Continue here</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md" data-testid="onboarding-dialog">
           {!challenge ? (
             <>
               <DialogHeader>
                 <DialogTitle>Start your chat with {o.name}</DialogTitle>
-                <DialogDescription>Enter your WhatsApp number and name. We don't verify WhatsApp ownership at this step.</DialogDescription>
+                <DialogDescription>Enter your WhatsApp number and name to start chatting.</DialogDescription>
               </DialogHeader>
+              <div className="rounded-2xl border-2 border-emerald-500 bg-emerald-50 p-4 text-emerald-950" data-testid="onboarding-real-number-notice">
+                <p className="text-base font-extrabold leading-snug">📱 Please enter your REAL WhatsApp number</p>
+                <p className="mt-1 text-sm leading-snug">It's your <b>backup</b>. If you change phones, clear your browser or install the app, we send a code to this WhatsApp number to restore your full chat history. With a wrong number, your chats can't be recovered.</p>
+              </div>
               <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (phoneOk && nameOk) start.mutate(); }}>
                 <div className="space-y-1">
                   <Label>WhatsApp number</Label>

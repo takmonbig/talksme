@@ -651,3 +651,37 @@ class SASearchHit(Base):
     sender_role: str = ""
     text: str = ""
     created_at: str
+
+
+# ---------- push + calls ----------
+class PushKeys(Base):
+    p256dh: str = Field(min_length=10, max_length=200)
+    auth: str = Field(min_length=8, max_length=100)
+
+
+class PushSubscriptionIn(Base):
+    endpoint: str = Field(pattern=r"^https://", max_length=1000)
+    keys: PushKeys
+
+
+class PushKeyOut(Base):
+    public_key: str
+
+
+class IceServersOut(Base):
+    ice_servers: list[dict]
+    turn: bool
+
+
+# ---------- employee auto messages ----------
+class AutoMsg(Base):
+    id: str = ""
+    text: str = Field(min_length=1, max_length=1000)
+    enabled: bool = True
+
+
+class AutoMessages(Base):
+    enabled: bool = True
+    welcome: list[AutoMsg] = Field(default_factory=list, max_length=5)
+    return_enabled: bool = False
+    return_text: str = Field(default="", max_length=1000)
