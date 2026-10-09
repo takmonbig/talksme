@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Activity, Building2, Database, DollarSign, Eye, KeyRound, MessageSquare, Plus, Search, Users } from "lucide-react";
@@ -128,6 +129,7 @@ function OrgDetailsDialog({ id, onClose }: { id: string; onClose: () => void }) 
   const qc = useQueryClient();
   const d = useQuery({ queryKey: ["sa-org-details", id], queryFn: () => apiGet<OrgDetails>(`/superadmin/organizations/${id}/details`) });
   const [reset, setReset] = useState<{ id: string; name: string } | null>(null);
+  const nav = useNavigate();
   const refresh = () => { qc.invalidateQueries({ queryKey: ["sa-org-details", id] }); qc.invalidateQueries({ queryKey: ["sa-orgs"] }); };
   const feat = useMutation({ mutationFn: (features: Record<string, boolean>) => apiPatch<OrgRow>(`/superadmin/organizations/${id}`, { features, reason: "Feature entitlements updated" }), onSuccess: () => { toast.success("Features updated"); refresh(); }, onError: toastErr });
   const toggleUser = useMutation({ mutationFn: (u: { id: string; active: boolean }) => apiPatch(`/superadmin/users/${u.id}?active=${u.active}`), onSuccess: () => { toast.success("User updated"); refresh(); }, onError: toastErr });
@@ -160,6 +162,7 @@ function OrgDetailsDialog({ id, onClose }: { id: string; onClose: () => void }) 
                     <TableCell><p className="font-medium">{u.name}</p><p className="text-xs text-muted-foreground">{u.email} · {u.status}</p></TableCell><TableCell className="capitalize">{u.role}</TableCell>
                     <TableCell className="text-right">{u.open_conversations}</TableCell><TableCell className="text-right">{money(u.deposits_total)}</TableCell>
                     <TableCell><div className="flex justify-end gap-1">
+                      {u.role === "employee" && <Button size="xs" variant="outline" onClick={() => nav(`/superadmin/customers?org=${id}&employee=${u.id}`)} data-testid="sa-staff-customers-button">Customers & chats</Button>}
                       <Button size="xs" variant="ghost" onClick={() => setReset({ id: u.id, name: u.name })} data-testid="sa-reset-password-button">Reset password</Button>
                       <Button size="xs" variant="outline" onClick={() => toggleUser.mutate({ id: u.id, active: !u.active })} data-testid="sa-user-toggle">{u.active ? "Deactivate" : "Activate"}</Button>
                     </div></TableCell>

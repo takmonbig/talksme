@@ -575,3 +575,44 @@ class Analytics(Base):
 class Ok(Base):
     ok: bool = True
     message: str = ""
+
+
+# ---------- super admin customer explorer ----------
+class SAEmployee(Base):
+    id: str
+    name: str
+    email: str
+    org_id: str
+    org_name: str = ""
+    avatar: str = ""
+    status: str = "offline"
+    active: bool = True
+    customers: int = 0
+    conversations: int = 0
+
+
+class SACustomerRow(CustomerProfile):
+    org_name: str = ""
+    email: str = ""
+    employees: list[str] = []
+    conversation_count: int = 0
+    message_count: int = 0
+    last_message: str = ""
+
+
+class SAConversation(Base):
+    id: str
+    employee_id: Optional[str] = None
+    employee_name: str = ""
+    landing_title: str = ""
+    status: str = "open"
+    last_message: str = ""
+    last_message_at: str
+    created_at: str
+    message_count: int = 0
+
+
+class SACustomerDetail(Base):
+    customer: SACustomerRow
+    conversations: list[SAConversation]
+    deposits: list[Deposit]

@@ -29,3 +29,10 @@ WebRTC calls (state simulation + call log), payments/webhooks, push notification
 - Customer OTP: always a real BlackSMS WhatsApp OTP, no demo bypass (owner decision). If BlackSMS balance is low, OTP fails with a clear error. Customer email login (customer@talksme.in / Demo@123) still works.
 - Uploads: 9 MB limit checked in the UI (media.tsx/ChatThread) and on the server (POST messages returns 413 above 9 MB; signature max_bytes=9437184).
 - WebRTC call checked with two browsers: ring -> accept -> connected -> end.
+
+## Super Admin Customer explorer (/superadmin/customers)
+- Filter by organization and employee (URL ?org=&employee=). The employees table shows how many customers and conversations each employee has.
+- Customer table (search/sort/pagination): name, email, WhatsApp number, org, employee(s), stage, deposits, messages, last active.
+- Customer sheet: every profile field, labels, notes, follow-ups, deposit list, all conversations, plus the full read-only chat transcript (including messages a participant deleted only for themselves).
+- APIs (superadmin only, 403 for other roles): GET /api/superadmin/employees?org_id, GET /api/superadmin/customers?org_id&employee_id, GET /api/superadmin/customers/{id}, GET /api/superadmin/conversations/{id}/messages. Each call writes an audit log entry (sa.customers_listed / sa.customer_viewed / sa.transcript_viewed).
+- Entry points: sidebar "Customer explorer", and "Customers & chats" on each employee row in the org details dialog.

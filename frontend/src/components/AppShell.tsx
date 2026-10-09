@@ -41,6 +41,7 @@ const NAV: Record<Exclude<Role, "customer">, NavItem[]> = {
   superadmin: [
     { to: "/superadmin", label: "Command center", icon: LayoutDashboard, end: true },
     { to: "/superadmin/organizations", label: "Organizations", icon: Building2 },
+    { to: "/superadmin/customers", label: "Customer explorer", icon: Contact },
     { to: "/superadmin/admins", label: "Admins", icon: ShieldCheck },
     { to: "/superadmin/subscriptions", label: "Subscriptions", icon: Layers },
     { to: "/superadmin/domains", label: "Domains", icon: Globe },

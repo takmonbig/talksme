@@ -91,3 +91,9 @@ export interface EmployeeDetails {
   deposits: Deposit[]; customers: number; calls: number; activity: AuditLog[];
 }
 export interface OrgDetails { org: OrgRow; staff: EmployeeStat[]; landing_pages: { id: string; title: string; slug: string; published: boolean; views: number; leads: number }[]; invoices: Invoice[] }
+
+// Super Admin customer explorer (mirrors SAEmployee / SACustomerRow / SAConversation / SACustomerDetail)
+export interface SAEmployee { id: string; name: string; email: string; org_id: string; org_name: string; avatar: string; status: string; active: boolean; customers: number; conversations: number }
+export interface SACustomerRow extends CustomerProfile { org_name: string; email: string; employees: string[]; conversation_count: number; message_count: number; last_message: string }
+export interface SAConversation { id: string; employee_id: string | null; employee_name: string; landing_title: string; status: string; last_message: string; last_message_at: string; created_at: string; message_count: number }
+export interface SACustomerDetail { customer: SACustomerRow; conversations: SAConversation[]; deposits: Deposit[] }
