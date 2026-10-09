@@ -186,7 +186,7 @@ function DepositHistory({ d, admin, onClose }: { d: Deposit; admin?: boolean; on
       <DialogContent className="sm:max-w-lg" data-testid="deposit-history-dialog">
         <DialogHeader>
           <DialogTitle>{money(d.amount, d.currency)} · {d.customer_name}</DialogTitle>
-          <DialogDescription>{d.product} · {d.method} · Ref {d.reference} · paid {d.payment_date}{d.proof_name && ` · proof: ${d.proof_name}`}</DialogDescription>
+          <DialogDescription>{d.product} · {d.method} · Ref {d.reference} · paid {d.payment_date}</DialogDescription>{d.proof_name && <a href={d.proof_name} target="_blank" rel="noreferrer" className="text-xs text-primary underline" data-testid="deposit-proof-link">View payment proof</a>}
         </DialogHeader>
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Append-only audit trail</p>

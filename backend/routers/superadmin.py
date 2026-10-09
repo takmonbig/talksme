@@ -7,7 +7,7 @@ from lib.analytics import compute
 from lib.auth import PUBLIC_USER, hash_pw, require, verify_pw
 from lib.db import db
 from lib.util import audit, iso, new_id, now, now_iso
-from models.schemas import (AccessIn, AdminIn, Analytics, AuditLog, Invoice, OrgCreateIn, OrgPatch, OrgRow, Plan, PlanIn,
+from models.schemas import (AccessIn, AdminIn, Analytics, AuditLog, DecideIn, Invoice, Ok, OrgCreateIn, OrgPatch, OrgRow, Plan, PlanIn, ResetPwIn,
                             PlatformSettings, User)
 
 router = APIRouter(prefix="/superadmin")
@@ -77,7 +77,7 @@ async def create_org(body: OrgCreateIn, user: dict = Depends(sa)):
     t = now_iso()
     org = {"id": new_id(), "name": body.name, "slug": body.slug, "domain": "", "domain_status": "unconfigured", "plan_id": body.plan_id,
            "billing_cycle": "monthly", "seats": body.seats, "status": "trial" if body.trial else "active", "primary_color": "#0284C7",
-           "accent_color": "#8B5CF6", "font": "Inter", "logo_url": "", "banner_url": "", "retention_days": 90, "created_at": t, "trial_ends": None}
+           "accent_color": "#8B5CF6", "font": "Inter", "logo_url": "", "banner_url": "", "retention_days": 90, "created_at": t, "trial_ends": None, "features": {k: True for k in ("broadcasts", "audio_calls", "landing_builder", "advanced_analytics", "deposits", "quick_replies")}}
     await db.organizations.insert_one(dict(org))
     await db.users.insert_one({"id": new_id(), "email": body.admin_email.lower(), "name": body.admin_name, "role": "admin", "org_id": org["id"],
                                "password_hash": hash_pw(body.admin_password), "avatar": "", "title": "Org Admin", "phone": "", "status": "offline",
@@ -121,6 +121,65 @@ async def support_access(oid: str, body: AccessIn, user: dict = Depends(sa)):
     staff = await db.users.find({"org_id": oid}, {"_id": 0, "name": 1, "email": 1, "role": 1, "active": 1}).to_list(100)
     await audit(user, "support_access.granted", f"org:{org['slug']} conversations,staff (read-only)", oid, body.reason)
     return {"org": org, "conversations": convs, "staff": staff, "expires_in_minutes": 15}
+
+
+@router.get("/organizations/{oid}/details", response_model=dict[str, Any])
+async def org_details(oid: str, user: dict = Depends(sa)):
+    row = next((r for r in await org_rows() if r["id"] == oid), None)
+    if not row:
+        raise HTTPException(404, "Organization not found")
+    staff = []
+    async for u in db.users.find({"org_id": oid, "deleted": {"$ne": True}}, PUBLIC_USER).sort("role", 1):
+        u["open_conversations"] = await db.conversations.count_documents({"employee_id": u["id"], "status": "open"})
+        u["deposits_total"] = sum([d["amount"] async for d in db.deposits.find({"employee_id": u["id"], "status": {"$ne": "Reversed"}}, {"amount": 1})])
+        staff.append(u)
+    lps = await db.landing_pages.find({"org_id": oid}, {"_id": 0, "id": 1, "title": 1, "slug": 1, "published": 1, "views": 1, "leads": 1}).to_list(100)
+    inv = await db.invoices.find({"org_id": oid}, {"_id": 0}).sort("date", -1).to_list(50)
+    await audit(user, "org.details_viewed", f"org:{row['slug']}", oid)
+    return {"org": row, "staff": staff, "landing_pages": lps, "invoices": inv}
+
+
+@router.post("/users/{uid}/reset-password", response_model=Ok)
+async def reset_user_password(uid: str, body: ResetPwIn, user: dict = Depends(sa)):
+    u = await db.users.find_one({"id": uid, "role": {"$in": ["admin", "employee"]}}, {"_id": 0})
+    if not u:
+        raise HTTPException(404, "User not found")
+    await db.users.update_one({"id": uid}, {"$set": {"password_hash": hash_pw(body.password)}})
+    await audit(user, "user.password_reset", f"user:{u['email']}", u.get("org_id"))
+    return Ok(message=f"Password reset for {u['name']}")
+
+
+@router.patch("/users/{uid}", response_model=Ok)
+async def toggle_user(uid: str, active: bool, user: dict = Depends(sa)):
+    u = await db.users.find_one({"id": uid, "role": {"$in": ["admin", "employee"]}}, {"_id": 0})
+    if not u:
+        raise HTTPException(404, "User not found")
+    await db.users.update_one({"id": uid}, {"$set": {"active": active}})
+    await audit(user, "user.activated" if active else "user.deactivated", f"user:{u['email']}", u.get("org_id"))
+    return Ok()
+
+
+@router.post("/organizations/{oid}/domain/verify", response_model=OrgRow)
+async def verify_domain(oid: str, user: dict = Depends(sa)):
+    org = await db.organizations.find_one({"id": oid}, {"_id": 0})
+    if not org or not org.get("domain"):
+        raise HTTPException(400, "Assign a domain first")
+    await db.organizations.update_one({"id": oid}, {"$set": {"domain_status": "verified"}})
+    await audit(user, "domain.verified", org["domain"], oid)
+    return next(r for r in await org_rows() if r["id"] == oid)
+
+
+@router.post("/invoices/{iid}/decide", response_model=Invoice)
+async def decide_invoice(iid: str, body: DecideIn, user: dict = Depends(sa)):
+    inv = await db.invoices.find_one({"id": iid}, {"_id": 0})
+    if not inv or inv["status"] != "awaiting_approval":
+        raise HTTPException(400, "Invoice is not awaiting approval")
+    status = "paid" if body.approve else "rejected"
+    await db.invoices.update_one({"id": iid}, {"$set": {"status": status}})
+    if body.approve and inv.get("plan_id"):
+        await db.organizations.update_one({"id": inv["org_id"]}, {"$set": {"plan_id": inv["plan_id"], "billing_cycle": inv["cycle"], "seats": inv["seats"], "status": "active"}})
+    await audit(user, f"billing.payment_{status}", f"invoice:{iid}", inv["org_id"])
+    return Invoice(**{**inv, "status": status})
 
 
 @router.get("/admins", response_model=list[User])

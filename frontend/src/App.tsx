@@ -1,13 +1,16 @@
 import { Link, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState, Logo } from "@/components/common";
+import { CallManager } from "@/components/chat/CallModal";
+import { useMe } from "@/lib/hooks";
+import { useRealtime } from "@/lib/realtime";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import PublicLanding from "@/pages/PublicLanding";
 import CustomerInbox from "@/pages/CustomerInbox";
 import { EmployeeAnalytics, EmployeeCustomers, EmployeeDashboard, EmployeeDeposits, EmployeeInbox, EmployeeSettings } from "@/pages/EmployeePages";
 import {
-  AdminAnalytics, AdminBilling, AdminBroadcasts, AdminConversations, AdminCustomers, AdminDashboard, AdminDeposits, AdminDomains,
+  AdminAnalytics, AdminBilling, AdminBroadcasts, AdminConversations, AdminCustomers, AdminDashboard, AdminDeposits,
   AdminEmployees, AdminLandingPages, AdminSettings,
 } from "@/pages/AdminPages";
 import {
@@ -23,9 +26,17 @@ function NotFound() {
   );
 }
 
+function RealtimeRoot() {
+  const me = useMe();
+  useRealtime(!!me.data);
+  return me.data && me.data.role !== "superadmin" ? <CallManager /> : null;
+}
+
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
   return (
+    <>
+    <RealtimeRoot />
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/demo" element={<Login />} />
@@ -50,7 +61,6 @@ export default function App() {
         <Route path="deposits" element={<AdminDeposits />} />
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="broadcasts" element={<AdminBroadcasts />} />
-        <Route path="domains" element={<AdminDomains />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="billing" element={<AdminBilling />} />
       </Route>
@@ -66,5 +76,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </>
   );
 }

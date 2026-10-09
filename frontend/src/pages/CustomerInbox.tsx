@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Archive, Ban, BellOff, Download, LogOut, MoreVertical, Search, Settings, ShieldAlert, WifiOff } from "lucide-react";
+import { Archive, Ban, Bell, BellOff, Download, LogOut, MoreVertical, Search, Settings, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,11 +76,13 @@ export default function CustomerInbox() {
   const [tab, setTab] = useState<"all" | "unread" | "archived">("all");
   const [prefs, setPrefs] = useState(false);
   const [report, setReport] = useState(false);
+  const [howTo, setHowTo] = useState(false);
+  const [notif, setNotif] = useState<string>("Notification" in window ? Notification.permission : "denied");
   const isCustomer = me.data?.role === "customer";
   const list = useQuery({
     queryKey: ["conversations", "customer", tab, q],
     queryFn: () => apiGet<Conversation[]>(`/conversations?filter=${tab}&q=${encodeURIComponent(q)}`),
-    enabled: isCustomer, refetchInterval: 4000,
+    enabled: isCustomer, refetchInterval: 20000,
   });
   const active = useQuery({
     queryKey: ["conversation", conversationId], queryFn: () => apiGet<Conversation>(`/conversations/${conversationId}`),
@@ -108,6 +110,7 @@ export default function CustomerInbox() {
           <div className="flex items-center gap-2 border-b px-4 py-3">
             <Logo compact />
             <div className="min-w-0 flex-1"><p className="font-heading text-lg font-bold leading-tight">Chats {unreadTotal > 0 && <span className="bg-brand ml-1 rounded-full px-2 text-xs text-white" data-testid="customer-unread-total">{unreadTotal}</span>}</p><p className="truncate text-[11px] text-muted-foreground">One inbox for every business · {me.data.name}{me.data.guest && " (guest)"}</p></div>
+            <Button size="sm" className="bg-brand h-8 px-2.5 text-xs text-white" onClick={() => (install.canInstall ? install.prompt() : setHowTo(true))} data-testid="download-app-button"><Download className="h-3.5 w-3.5" /> Download App</Button>
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="ghost" size="icon" data-testid="customer-menu-button" />}><MoreVertical className="h-4 w-4" /></DropdownMenuTrigger>
@@ -119,9 +122,15 @@ export default function CustomerInbox() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          {install.canInstall && (
+          {false && (
             <button onClick={install.prompt} className="bg-brand-subtle mx-3 mt-3 flex items-center gap-2 rounded-xl border p-3 text-left text-xs" data-testid="pwa-install-banner">
               <Download className="h-4 w-4 text-primary" /> Install talksme.in — one app for all your business chats.
+            </button>
+          )}
+          {notif !== "granted" && "Notification" in window && (
+            <button onClick={() => Notification.requestPermission().then((p) => { setNotif(p); if (p === "granted") toast.success("Notifications enabled"); else toast.error("Notifications blocked in browser settings"); })}
+              className="mx-3 mt-3 flex items-center gap-2 rounded-xl border border-primary/30 bg-accent p-3 text-left text-xs font-medium text-accent-foreground" data-testid="enable-notifications-banner">
+              <Bell className="h-4 w-4" /> Enable notifications to know when a business replies
             </button>
           )}
           <div className="space-y-2 p-3">
@@ -147,7 +156,7 @@ export default function CustomerInbox() {
               </button>
             ))}
           </div>
-          <p className="border-t px-4 py-2 text-[10px] text-muted-foreground">Each business only sees its own conversation with you.</p>
+          <p className="flex items-center gap-1 border-t px-4 py-2 text-[10px] text-emerald-600" data-testid="customer-secure-footer"><ShieldAlert className="h-3 w-3" /> 100% private & secure · each business only sees its own chat with you</p>
         </aside>
         <main className={cn("min-w-0 flex-1", !conversationId && "hidden md:block")}>
           {conversationId && active.isError && <div className="p-6"><EmptyState icon={<ShieldAlert className="h-6 w-6" />} title="Conversation unavailable" text="It doesn't exist or belongs to another account." action={<Button onClick={() => nav("/chat")} data-testid="back-to-chats-button">Back to chats</Button>} /></div>}
@@ -176,6 +185,12 @@ export default function CustomerInbox() {
           )}
         </main>
       </div>
+      <Dialog open={howTo} onOpenChange={setHowTo}>
+        <DialogContent data-testid="install-help-dialog">
+          <DialogHeader><DialogTitle>Install the talksme.in app</DialogTitle><DialogDescription>One app for all your business chats — no Play Store needed.</DialogDescription></DialogHeader>
+          <ol className="list-decimal space-y-2 pl-5 text-sm"><li><b>Android (Chrome):</b> tap ⋮ menu → <b>Install app</b> / Add to Home screen.</li><li><b>iPhone (Safari):</b> tap Share → <b>Add to Home Screen</b>.</li><li><b>Desktop:</b> click the install icon in the address bar.</li></ol>
+        </DialogContent>
+      </Dialog>
       <PrefsDialog me={me.data} open={prefs} onOpenChange={setPrefs} />
       {conv && <ReportDialog conv={conv} open={report} onOpenChange={setReport} />}
     </div>

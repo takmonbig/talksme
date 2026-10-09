@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from lib.auth import optional_user, set_session
 from lib.conv import open_conversation
 from lib.db import db
-from lib.util import audit, iso, new_id, now, now_iso
+from lib.util import audit, now_iso
+from lib.util import new_id
+from routers.realtime import create_challenge
 from models.schemas import PublicLanding, StartChatIn, StartChatOut, VerifyIn
 
 router = APIRouter()
@@ -51,12 +53,8 @@ async def start_chat(org_slug: str, slug: str, body: StartChatIn, response: Resp
         return StartChatOut(status="ok", conversation_id=await open_conversation(viewer, lp, preferred))
     existing = await db.users.find_one({"phone": phone, "role": "customer"}, {"_id": 0})
     if existing:
-        code = f"{secrets.randbelow(10**6):06d}"
-        ch = {"id": new_id(), "user_id": existing["id"], "code": code, "landing_id": lp["id"], "preferred": preferred,
-              "expires": iso(now() + timedelta(minutes=10)), "attempts": 0}
-        await db.otp_challenges.insert_one(ch)
-        # MOCKED: production would deliver this via SMS/WhatsApp OTP. The preview returns it for testing.
-        return StartChatOut(status="verification_required", challenge_id=ch["id"], mock_code=code)
+        # Real WhatsApp OTP (BlackSMS) before any existing history is disclosed.
+        return StartChatOut(status="verification_required", challenge_id=await create_challenge(existing, lp["id"], preferred))
     user = {"id": new_id(), "email": None, "name": body.name, "role": "customer", "org_id": None, "password_hash": None,
             "avatar": "", "title": "", "phone": phone, "status": "online", "verified": False, "active": True,
             "calls_enabled": True, "guest": True, "target": 0, "notify_sound": True, "notify_push": False, "created_at": now_iso()}

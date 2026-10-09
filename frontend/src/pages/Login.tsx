@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo, MockBadge, ThemeToggle } from "@/components/common";
 import { apiPost } from "@/lib/api";
+import type { StartChatOut } from "@/lib/types";
 import { HOME_BY_ROLE, errMsg } from "@/lib/hooks";
 import { beginSession } from "@/lib/session";
 import type { User } from "@/lib/types";
@@ -16,7 +17,6 @@ const ROLES = [
   { key: "customer", label: "Customer", email: "customer@talksme.in", icon: MessageCircle, text: "Universal PWA inbox — chats with 3 businesses." },
   { key: "employee", label: "Employee", email: "agent@talksme.in", icon: Headset, text: "WhatsApp-style workspace, CRM, deposits, transfers." },
   { key: "admin", label: "Admin", email: "admin@talksme.in", icon: Building2, text: "Org dashboard, landing builder, approvals, billing." },
-  { key: "superadmin", label: "Super Admin", email: "superadmin@talksme.in", icon: ShieldCheck, text: "Platform command center across all tenants." },
 ];
 
 export default function Login() {
@@ -27,14 +27,26 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
+  const [mode, setMode] = useState<"email" | "otp">("email");
+  const [otp, setOtp] = useState({ cc: "+91", phone: "", code: "", challenge: "" });
+  const done = (u: User) => {
+    beginSession();
+    qc.setQueryData(["me"], u);
+    const next = params.get("next");
+    nav(next && next.startsWith(HOME_BY_ROLE[u.role]) ? next : HOME_BY_ROLE[u.role]);
+  };
+  const sendOtp = useMutation({
+    mutationFn: () => apiPost<StartChatOut>("/auth/otp/request", { country_code: otp.cc, phone: otp.phone.replace(/\D/g, "") }),
+    onSuccess: (r) => { setOtp((o) => ({ ...o, challenge: r.challenge_id ?? "" })); setError(""); },
+    onError: (e) => setError(errMsg(e)),
+  });
+  const verifyOtp = useMutation({
+    mutationFn: () => apiPost<User>("/auth/otp/verify", { challenge_id: otp.challenge, code: otp.code }),
+    onSuccess: done, onError: (e) => setError(errMsg(e)),
+  });
   const m = useMutation({
     mutationFn: () => apiPost<User>("/auth/login", { email, password }),
-    onSuccess: (u) => {
-      beginSession();
-      qc.setQueryData(["me"], u);
-      const next = params.get("next");
-      nav(next && next.startsWith(HOME_BY_ROLE[u.role]) ? next : HOME_BY_ROLE[u.role]);
-    },
+    onSuccess: done,
     onError: (e) => setError(errMsg(e)),
   });
   const submit = (e: React.FormEvent) => {
@@ -59,7 +71,7 @@ export default function Login() {
           <p className="mt-3 max-w-lg text-muted-foreground">Each role has real email/password login and server-enforced permissions. Click a card to fill its demo credentials — password for all: <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">Demo@123</code></p>
           <div className="mt-8 grid gap-3 sm:grid-cols-2">
             {ROLES.map((r) => (
-              <button key={r.key} onClick={() => { setEmail(r.email); setPassword("Demo@123"); setError(""); }} data-testid={`role-card-${r.key}`}
+              <button key={r.key} onClick={() => { setMode("email"); setEmail(r.email); setPassword("Demo@123"); setError(""); }} data-testid={`role-card-${r.key}`}
                 className={cn("lift group rounded-2xl border bg-card p-5 text-left shadow-sm", email === r.email && "border-primary ring-2 ring-primary/20")}>
                 <div className="flex items-center justify-between">
                   <div className="bg-brand rounded-xl p-2.5 text-white"><r.icon className="h-5 w-5" /></div>
@@ -74,6 +86,31 @@ export default function Login() {
         </div>
         <div className="lg:pt-16">
           <form onSubmit={submit} className="rounded-3xl border bg-card/80 p-6 shadow-xl backdrop-blur-xl sm:p-8" data-testid="login-form">
+            <div className="mb-4 flex rounded-xl border p-1 text-sm">
+              {(["email", "otp"] as const).map((m) => (
+                <button key={m} type="button" onClick={() => { setMode(m); setError(""); }} data-testid={`login-mode-${m}`}
+                  className={cn("flex-1 rounded-lg py-1.5 font-medium transition-colors", mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground")}>
+                  {m === "email" ? "Team / Email" : "Customer · WhatsApp OTP"}
+                </button>
+              ))}
+            </div>
+            {mode === "otp" ? (
+              <div className="space-y-4" data-testid="otp-login">
+                <h2 className="font-heading text-2xl font-bold">Customer sign in</h2>
+                <p className="text-sm text-muted-foreground">We'll send a 6-digit code to your WhatsApp.</p>
+                <div className="flex gap-2">
+                  <Input className="w-20" value={otp.cc} onChange={(e) => setOtp({ ...otp, cc: e.target.value })} data-testid="otp-country-input" />
+                  <Input inputMode="tel" placeholder="WhatsApp number" value={otp.phone} onChange={(e) => setOtp({ ...otp, phone: e.target.value })} data-testid="otp-phone-input" />
+                </div>
+                {otp.challenge && <Input inputMode="numeric" placeholder="6-digit code" value={otp.code} onChange={(e) => setOtp({ ...otp, code: e.target.value.replace(/\D/g, "").slice(0, 6) })} className="text-center font-mono tracking-[0.4em]" data-testid="otp-code-input" />}
+                {error && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" data-testid="login-error">{error}</p>}
+                {otp.challenge ? (
+                  <Button type="button" className="bg-brand h-11 w-full text-white" disabled={otp.code.length !== 6 || verifyOtp.isPending} onClick={() => verifyOtp.mutate()} data-testid="otp-verify-button">Verify & open my chats</Button>
+                ) : (
+                  <Button type="button" className="bg-brand h-11 w-full text-white" disabled={!/^\d{6,14}$/.test(otp.phone.replace(/\D/g, "")) || sendOtp.isPending} onClick={() => sendOtp.mutate()} data-testid="otp-send-button">{sendOtp.isPending ? "Sending…" : "Send WhatsApp OTP"}</Button>
+                )}
+              </div>
+            ) : (<>
             <h2 className="font-heading text-2xl font-bold">Sign in</h2>
             <p className="mt-1 text-sm text-muted-foreground">Sessions use secure httpOnly cookies and expire after 12 hours.</p>
             <div className="mt-6 space-y-4">
@@ -87,7 +124,7 @@ export default function Login() {
               </div>
               {error && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" data-testid="login-error">{error}</p>}
               <Button type="submit" className="bg-brand h-11 w-full text-white" disabled={m.isPending} data-testid="login-submit-button">{m.isPending ? "Signing in…" : "Sign in"}</Button>
-            </div>
+            </div></>)}
             <p className="mt-5 text-xs text-muted-foreground">Visiting as a new customer? Open a business page like <Link to="/p/talksme/sales" className="font-medium text-primary underline" data-testid="login-sample-landing-link">/p/talksme/sales</Link> and tap Chat Now.</p>
           </form>
         </div>

@@ -4,7 +4,8 @@ from lib.auth import PUBLIC_USER, clear_session, current_user, set_session, veri
 from lib.db import db
 from lib.seed_data import reset_demo
 from lib.util import audit
-from models.schemas import LoginIn, MeUpdate, Ok, User
+from lib.auth import hash_pw
+from models.schemas import LoginIn, MeUpdate, Ok, PasswordIn, User
 
 router = APIRouter()
 _attempts: dict[str, list[float]] = {}
@@ -52,6 +53,16 @@ async def update_me(body: MeUpdate, user: dict = Depends(current_user)):
         if "name" in upd and user["role"] == "customer":
             await db.customer_profiles.update_many({"user_id": user["id"]}, {"$set": {"name": upd["name"]}})
     return User(**(await db.users.find_one({"id": user["id"]}, PUBLIC_USER)))
+
+
+@router.patch("/auth/password", response_model=Ok)
+async def change_password(body: PasswordIn, user: dict = Depends(current_user)):
+    full = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    if not verify_pw(body.current_password, full.get("password_hash")):
+        raise HTTPException(400, "Current password is incorrect")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": hash_pw(body.new_password)}})
+    await audit(user, "auth.password_changed", f"user:{user['id']}", user.get("org_id"))
+    return Ok(message="Password updated")
 
 
 @router.post("/demo/reset", response_model=Ok)

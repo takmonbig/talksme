@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from lib.auth import require
 from lib.conv import get_conv, shape
 from lib.db import db
+from lib.realtime import publish
 from lib.util import audit, new_id, now_iso
 from models.schemas import (AssignIn, Call, CallIn, Conversation, ConversationPatch, Message, MessageIn, Ok, ReportIn,
                             Transfer, TransferIn)
@@ -89,8 +90,8 @@ async def send_message(cid: str, body: MessageIn, user: dict = Depends(chat_user
     if len(recent) >= 20:
         raise HTTPException(429, "You're sending messages too quickly")
     _rate[user["id"]] = recent + [tnow]
-    if body.attachment and body.attachment.size > 25 * 1024 * 1024:
-        raise HTTPException(413, "Attachments must be under 25 MB")
+    if body.attachment and body.attachment.size > 9 * 1024 * 1024:
+        raise HTTPException(413, "Attachments must be 9 MB or smaller")
     side = "customer" if user["role"] == "customer" else "employee"
     preview = ""
     if body.reply_to:
@@ -109,6 +110,7 @@ async def send_message(cid: str, body: MessageIn, user: dict = Depends(chat_user
         await db.customer_profiles.update_one({"id": c["customer_id"], "assigned_employee_id": None},
                                               {"$set": {"assigned_employee_id": user["id"], "assigned_employee_name": user["name"]}})
     await db.conversations.update_one({"id": cid}, upd)
+    await publish(c, {"type": "message"})
     if side == "customer":
         await db.customer_profiles.update_one({"id": c["customer_id"]}, {"$set": {"last_active": t}})
     return Message(**msg)
@@ -166,7 +168,8 @@ async def list_calls(cid: str, user: dict = Depends(chat_user)):
 async def log_call(cid: str, body: CallIn, user: dict = Depends(chat_user)):
     """MOCKED WebRTC: the client simulates call state and logs the outcome here."""
     c = (await shape(user, [await get_conv(user, cid)]))[0]
-    if not c["calls_enabled"] or c["blocked"]:
+    org = await db.organizations.find_one({"id": c["org_id"]}, {"_id": 0, "features": 1})
+    if not c["calls_enabled"] or c["blocked"] or (org or {}).get("features", {}).get("audio_calls") is False:
         raise HTTPException(403, "Audio calls are disabled for this conversation")
     call = {"id": new_id(), "conversation_id": cid, "org_id": c["org_id"], "initiated_by": user["role"],
             "status": body.status, "duration": body.duration, "at": now_iso()}
@@ -177,6 +180,7 @@ async def log_call(cid: str, body: CallIn, user: dict = Depends(chat_user)):
                                   "reply_to": None, "reply_preview": "", "status": "read", "created_at": call["at"],
                                   "idempotency_key": new_id(), "hidden_for": []})
     await db.conversations.update_one({"id": cid}, {"$set": {"last_message": label, "last_message_at": call["at"]}})
+    await publish(c, {"type": "message"})
     return Call(**call)
 
 

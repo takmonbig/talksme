@@ -113,11 +113,8 @@ export default function PublicLanding() {
             <>
               <DialogHeader>
                 <DialogTitle>Verify it's you</DialogTitle>
-                <DialogDescription>This number already has conversations. To protect them, enter the 6-digit code we sent to {form.country_code} {form.phone}.</DialogDescription>
+                <DialogDescription>This number already has conversations. To protect them, enter the 6-digit code we sent on WhatsApp to {form.country_code} {form.phone}.</DialogDescription>
               </DialogHeader>
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs" data-testid="onboarding-mock-otp">
-                <MockBadge label="MOCKED SMS" /> Preview code: <b className="font-mono text-sm">{challenge.mock_code}</b>
-              </div>
               <Input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="••••••" className="text-center font-mono text-lg tracking-[0.5em]" data-testid="onboarding-otp-input" />
               <DialogFooter><Button className="w-full" disabled={code.length !== 6 || verify.isPending} onClick={() => verify.mutate()} data-testid="onboarding-verify-button">Verify & continue</Button></DialogFooter>
             </>

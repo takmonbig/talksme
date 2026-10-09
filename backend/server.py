@@ -14,7 +14,7 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
 from lib.seed_data import reset_demo
-from routers import admin, auth, chat, crm, public, superadmin
+from routers import admin, auth, chat, crm, public, realtime, superadmin
 
 
 async def _boot() -> None:
@@ -39,7 +39,7 @@ async def root():
     return {"message": "OmniChat CRM API", "mode": "preview"}
 
 
-for r in (auth, public, chat, crm, admin, superadmin):
+for r in (auth, public, chat, crm, admin, superadmin, realtime):
     api_router.include_router(r.router)
 
 # Include the router in the main app

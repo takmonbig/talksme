@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, Skeleton, StatusBadge } from "@/components/common";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import { uploadFile } from "@/lib/media";
 import { dateTime, money, toastErr } from "@/lib/hooks";
 import type { CustomerProfile, Deposit, EmployeeStat, Transfer } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -84,7 +85,7 @@ export function DepositDialog({ open, onOpenChange, customers, presetCustomer }:
           <div className="col-span-2 space-y-1"><Label>Transaction reference</Label><Input value={f.reference} onChange={(e) => set("reference", e.target.value)} placeholder="e.g. UPI ref / UTR" data-testid="deposit-reference-input" />{field("reference")}</div>
           <div className="col-span-2 space-y-1">
             <Label>Proof attachment (optional)</Label>
-            <Input type="file" accept="image/*,.pdf" onChange={(e) => set("proof_name", e.target.files?.[0]?.name ?? "")} data-testid="deposit-proof-input" />
+            <Input type="file" accept="image/*,.pdf" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { set("proof_name", (await uploadFile(file)).url); toast.success("Proof uploaded"); } catch (err) { toast.error((err as Error).message); } }} data-testid="deposit-proof-input" />{f.proof_name && <a href={f.proof_name} target="_blank" rel="noreferrer" className="text-xs text-primary underline">View uploaded proof</a>}
           </div>
           <div className="col-span-2 space-y-1"><Label>Notes</Label><Textarea value={f.notes} onChange={(e) => set("notes", e.target.value)} rows={2} data-testid="deposit-notes-input" /></div>
         </div>

@@ -11,6 +11,8 @@ import { InboxWorkspace } from "@/components/InboxWorkspace";
 import { AnalyticsView, CustomersView, DepositsView } from "@/components/crm/Views";
 import { apiGet, apiPatch } from "@/lib/api";
 import { dateTime, toastErr, useMe } from "@/lib/hooks";
+import { ImageInput } from "@/lib/media";
+import { ChangePassword } from "@/pages/AdminPages";
 import type { Transfer, User } from "@/lib/types";
 
 function MyTransfers() {
@@ -57,7 +59,7 @@ export function EmployeeSettings() {
           <div className="flex items-center gap-4"><Avatar name={u.name} src={avatar ?? u.avatar} size={64} status={u.status} /><div><p className="font-heading text-lg font-semibold">{u.name}</p><p className="text-sm text-muted-foreground">{u.title}</p>{u.verified ? <VerifiedBadge /> : <span className="text-xs text-muted-foreground">Verification pending admin approval</span>}</div></div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <div className="space-y-1"><Label>Display name</Label><Input value={name ?? u.name} onChange={(e) => setName(e.target.value)} data-testid="settings-name-input" /></div>
-            <div className="space-y-1"><Label>Avatar URL</Label><Input value={avatar ?? u.avatar} onChange={(e) => setAvatar(e.target.value)} data-testid="settings-avatar-input" /></div>
+            <div className="space-y-1"><Label>Avatar URL</Label><ImageInput value={avatar ?? u.avatar} onChange={(v) => setAvatar(v)} testid="settings-avatar" /></div>
           </div>
           <Button className="mt-4" disabled={m.isPending || (name ?? u.name).trim().length < 2} onClick={() => m.mutate({ name: name ?? u.name, avatar: avatar ?? u.avatar })} data-testid="settings-save-profile">Save profile</Button>
         </div>
@@ -69,10 +71,11 @@ export function EmployeeSettings() {
               <SelectContent>{["online", "away", "offline"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <label className="flex items-center gap-2 text-sm"><Checkbox checked={u.calls_enabled} onCheckedChange={(v) => m.mutate({ calls_enabled: !!v })} data-testid="settings-calls-checkbox" /> Accept incoming audio calls <MockBadge /></label>
+          <label className="flex items-center gap-2 text-sm"><Checkbox checked={u.calls_enabled} onCheckedChange={(v) => m.mutate({ calls_enabled: !!v })} data-testid="settings-calls-checkbox" /> Accept incoming audio calls</label>
           <label className="flex items-center gap-2 text-sm"><Checkbox checked={u.notify_sound} onCheckedChange={(v) => m.mutate({ notify_sound: !!v })} data-testid="settings-sound-checkbox" /> Sound for new messages</label>
-          <label className="flex items-center gap-2 text-sm"><Checkbox checked={u.notify_push} onCheckedChange={(v) => m.mutate({ notify_push: !!v })} data-testid="settings-push-checkbox" /> Push notifications <MockBadge /></label>
+          <label className="flex items-center gap-2 text-sm"><Checkbox checked={u.notify_push} onCheckedChange={(v) => m.mutate({ notify_push: !!v })} data-testid="settings-push-checkbox" /> Browser notifications</label>
         </div>
+        <ChangePassword />
       </div>
     </div>
   );

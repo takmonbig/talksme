@@ -15,7 +15,9 @@ import { DemoBadge, ErrorState, MockBadge, PageHeader, Pager, SkeletonGrid, Sort
 import { AnalyticsView } from "@/components/crm/Views";
 import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { compact, dateTime, money, toastErr } from "@/lib/hooks";
-import type { AuditLog, Invoice, OrgRow, Overview, Plan, PlatformSettings, User } from "@/lib/types";
+import { ImageInput } from "@/lib/media";
+import { ResetPasswordDialog } from "@/pages/AdminPages";
+import type { OrgDetails, AuditLog, Invoice, OrgRow, Overview, Plan, PlatformSettings, User } from "@/lib/types";
 
 const COLORS = ["#06B6D4", "#3B82F6", "#8B5CF6", "#10B981", "#F59E0B"];
 const tip = { contentStyle: { background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, fontSize: 12 } };
@@ -34,7 +36,7 @@ export function SuperDashboard() {
       {o.data && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard tone="brand" label="MRR" value={money(k.mrr, "USD")} hint={`ARR ${money(k.arr, "USD")}`} icon={<DollarSign className="h-4 w-4" />} testid="sa-kpi-mrr" />
+            <StatCard tone="brand" label="MRR" value={money(k.mrr)} hint={`ARR ${money(k.arr)}`} icon={<DollarSign className="h-4 w-4" />} testid="sa-kpi-mrr" />
             <StatCard label="Organizations" value={k.organizations} hint={`${k.active_organizations} active · ${k.trial_organizations} trial · ${k.suspended_organizations} suspended`} icon={<Building2 className="h-4 w-4" />} testid="sa-kpi-orgs" />
             <StatCard label="People" value={k.employees + k.admins} hint={`${k.admins} admins · ${k.employees} employees · ${k.customers} customers`} icon={<Users className="h-4 w-4" />} testid="sa-kpi-people" />
             <StatCard label="Conversations" value={k.conversations} hint={`${k.active_conversations} active today · ${compact(k.messages)} messages`} icon={<MessageSquare className="h-4 w-4" />} testid="sa-kpi-conversations" />
@@ -57,7 +59,7 @@ export function SuperDashboard() {
           <div className="rounded-2xl border bg-card">
             <Table>
               <TableHeader><TableRow><TableHead>Organization</TableHead><TableHead>Plan</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Seats</TableHead><TableHead className="text-right">Deposits</TableHead><TableHead className="text-right">MRR</TableHead></TableRow></TableHeader>
-              <TableBody>{o.data.orgs.map((r) => <TableRow key={r.id}><TableCell className="font-medium">{r.name}</TableCell><TableCell>{r.plan_name}</TableCell><TableCell><StatusBadge status={r.status} /></TableCell><TableCell className="text-right">{r.employees}/{r.seats}</TableCell><TableCell className="text-right">{money(r.deposits_total)}</TableCell><TableCell className="text-right">{money(r.mrr, "USD")}</TableCell></TableRow>)}</TableBody>
+              <TableBody>{o.data.orgs.map((r) => <TableRow key={r.id}><TableCell className="font-medium">{r.name}</TableCell><TableCell>{r.plan_name}</TableCell><TableCell><StatusBadge status={r.status} /></TableCell><TableCell className="text-right">{r.employees}/{r.seats}</TableCell><TableCell className="text-right">{money(r.deposits_total)}</TableCell><TableCell className="text-right">{money(r.mrr)}</TableCell></TableRow>)}</TableBody>
             </Table>
           </div>
         </div>
@@ -120,12 +122,70 @@ function NewOrgDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
   );
 }
 
+const FEATURES: Record<string, string> = { broadcasts: "Broadcasts", audio_calls: "Audio calls", landing_builder: "Landing-page builder", advanced_analytics: "Advanced analytics", deposits: "Deposit ledger", quick_replies: "Quick replies" };
+
+function OrgDetailsDialog({ id, onClose }: { id: string; onClose: () => void }) {
+  const qc = useQueryClient();
+  const d = useQuery({ queryKey: ["sa-org-details", id], queryFn: () => apiGet<OrgDetails>(`/superadmin/organizations/${id}/details`) });
+  const [reset, setReset] = useState<{ id: string; name: string } | null>(null);
+  const refresh = () => { qc.invalidateQueries({ queryKey: ["sa-org-details", id] }); qc.invalidateQueries({ queryKey: ["sa-orgs"] }); };
+  const feat = useMutation({ mutationFn: (features: Record<string, boolean>) => apiPatch<OrgRow>(`/superadmin/organizations/${id}`, { features, reason: "Feature entitlements updated" }), onSuccess: () => { toast.success("Features updated"); refresh(); }, onError: toastErr });
+  const toggleUser = useMutation({ mutationFn: (u: { id: string; active: boolean }) => apiPatch(`/superadmin/users/${u.id}?active=${u.active}`), onSuccess: () => { toast.success("User updated"); refresh(); }, onError: toastErr });
+  const o = d.data?.org;
+  return (
+    <Dialog open onOpenChange={(x) => !x && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl" data-testid="org-details-dialog">
+        <DialogHeader><DialogTitle>{o?.name ?? "Organization"}</DialogTitle><DialogDescription>{o && `${o.slug} · ${o.domain || "no domain"} · ${o.plan_name} · ${o.status} · ${o.employees}/${o.seats} seats`}</DialogDescription></DialogHeader>
+        {!d.data ? <SkeletonGrid /> : (
+          <div className="space-y-5 text-sm">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <StatCard label="Customers" value={o!.customers} /><StatCard label="Conversations" value={o!.conversations} /><StatCard label="Deposits" value={money(o!.deposits_total)} /><StatCard label="MRR" value={money(o!.mrr)} />
+            </div>
+            <div className="rounded-xl border p-3">
+              <p className="mb-2 font-semibold">Enabled functions (paid features)</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {Object.entries(FEATURES).map(([k, l]) => (
+                  <label key={k} className="flex items-center gap-2" data-testid={`org-feature-${k}`}>
+                    <Checkbox checked={o!.features?.[k] !== false} onCheckedChange={(v) => feat.mutate({ ...o!.features, [k]: !!v })} /> {l}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 font-semibold">Admins & employees</p>
+              <Table>
+                <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Role</TableHead><TableHead className="text-right">Open</TableHead><TableHead className="text-right">Deposits</TableHead><TableHead /></TableRow></TableHeader>
+                <TableBody>{d.data.staff.map((u) => (
+                  <TableRow key={u.id} data-testid="org-staff-row" className={u.active ? "" : "opacity-60"}>
+                    <TableCell><p className="font-medium">{u.name}</p><p className="text-xs text-muted-foreground">{u.email} · {u.status}</p></TableCell><TableCell className="capitalize">{u.role}</TableCell>
+                    <TableCell className="text-right">{u.open_conversations}</TableCell><TableCell className="text-right">{money(u.deposits_total)}</TableCell>
+                    <TableCell><div className="flex justify-end gap-1">
+                      <Button size="xs" variant="ghost" onClick={() => setReset({ id: u.id, name: u.name })} data-testid="sa-reset-password-button">Reset password</Button>
+                      <Button size="xs" variant="outline" onClick={() => toggleUser.mutate({ id: u.id, active: !u.active })} data-testid="sa-user-toggle">{u.active ? "Deactivate" : "Activate"}</Button>
+                    </div></TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div><p className="mb-1 font-semibold">Landing pages</p>{d.data.landing_pages.map((l) => <p key={l.id} className="text-xs">{l.title} · /{l.slug} · {l.views} views · {l.leads} leads {l.published ? "" : "(unpublished)"}</p>)}</div>
+              <div><p className="mb-1 font-semibold">Invoices</p>{d.data.invoices.slice(0, 8).map((i) => <p key={i.id} className="text-xs">{dateTime(i.date)} · {money(i.amount)} · {i.status}</p>)}</div>
+            </div>
+          </div>
+        )}
+        {reset && <ResetPasswordDialog name={reset.name} endpoint={`/superadmin/users/${reset.id}/reset-password`} onClose={() => setReset(null)} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function SuperOrganizations() {
   const qc = useQueryClient();
   const q = useOrgs();
   const plans = usePlans();
   const [open, setOpen] = useState(false);
   const [access, setAccess] = useState<OrgRow | null>(null);
+  const [details, setDetails] = useState<string | null>(null);
   const [suspend, setSuspend] = useState<OrgRow | null>(null);
   const [reason, setReason] = useState("");
   const m = useMutation({ mutationFn: (x: { id: string; b: Record<string, unknown> }) => apiPatch<OrgRow>(`/superadmin/organizations/${x.id}`, x.b), onSuccess: (o) => { toast.success(`${o.name} updated`); qc.invalidateQueries({ queryKey: ["sa-orgs"] }); setSuspend(null); setReason(""); }, onError: toastErr });
@@ -146,9 +206,10 @@ export function SuperOrganizations() {
                 <TableCell><StatusBadge status={o.status} testid="org-status-badge" /></TableCell>
                 <TableCell className="text-right">{o.customers}</TableCell>
                 <TableCell><div className="flex justify-end gap-1">
+                  <Button size="xs" onClick={() => setDetails(o.id)} data-testid="org-details-button">Open</Button>
                   <Button size="xs" variant="outline" onClick={() => setAccess(o)} data-testid="org-access-button"><Eye className="h-3.5 w-3.5" /> Access</Button>
                   {o.status === "suspended" ? <Button size="xs" onClick={() => m.mutate({ id: o.id, b: { status: "active", reason: "Reactivated" } })} data-testid="org-reactivate-button">Reactivate</Button>
-                    : <Button size="xs" variant="destructive" onClick={() => setSuspend(o)} data-testid="org-suspend-button">Suspend</Button>}
+                    : <Button size="xs" variant="destructive" onClick={() => setSuspend(o)} data-testid="org-suspend-button">Deactivate</Button>}
                 </div></TableCell>
               </TableRow>
             ))}
@@ -158,6 +219,7 @@ export function SuperOrganizations() {
       </div>
       <NewOrgDialog open={open} onOpenChange={setOpen} />
       {access && <AccessDialog org={access} onClose={() => setAccess(null)} />}
+      {details && <OrgDetailsDialog id={details} onClose={() => setDetails(null)} />}
       <Dialog open={!!suspend} onOpenChange={(o) => !o && setSuspend(null)}>
         <DialogContent data-testid="suspend-dialog">
           <DialogHeader><DialogTitle>Suspend {suspend?.name}?</DialogTitle><DialogDescription>Its admins and employees lose access and its landing pages go offline. Data is retained.</DialogDescription></DialogHeader>
@@ -209,8 +271,8 @@ function PlanEditor({ plan, onClose }: { plan: Plan | null; onClose: () => void 
         <DialogHeader><DialogTitle>{plan ? `Edit ${plan.name}` : "New plan"}</DialogTitle><DialogDescription>Example configuration — not final commercial pricing.</DialogDescription></DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1 sm:col-span-2"><Label>Name</Label><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} data-testid="plan-name-input" /></div>
-          <div className="space-y-1"><Label>Monthly price (USD)</Label><Input type="number" value={f.price_monthly} onChange={(e) => setF({ ...f, price_monthly: e.target.value })} data-testid="plan-monthly-input" /></div>
-          <div className="space-y-1"><Label>Yearly price (USD)</Label><Input type="number" value={f.price_yearly} onChange={(e) => setF({ ...f, price_yearly: e.target.value })} data-testid="plan-yearly-input" /></div>
+          <div className="space-y-1"><Label>Monthly price (₹)</Label><Input type="number" value={f.price_monthly} onChange={(e) => setF({ ...f, price_monthly: e.target.value })} data-testid="plan-monthly-input" /></div>
+          <div className="space-y-1"><Label>Yearly price (₹)</Label><Input type="number" value={f.price_yearly} onChange={(e) => setF({ ...f, price_yearly: e.target.value })} data-testid="plan-yearly-input" /></div>
           <div className="space-y-1"><Label>Included seats</Label><Input type="number" value={f.seats} onChange={(e) => setF({ ...f, seats: e.target.value })} data-testid="plan-seats-input" /></div>
           <label className="flex items-center gap-2 pt-6 text-sm"><Checkbox checked={f.active} onCheckedChange={(v) => setF({ ...f, active: !!v })} /> Available for purchase</label>
           <div className="space-y-1 sm:col-span-2"><Label>Features (one per line)</Label><Textarea rows={4} value={f.features} onChange={(e) => setF({ ...f, features: e.target.value })} data-testid="plan-features-input" /></div>
@@ -226,17 +288,31 @@ export function SuperSubscriptions() {
   const inv = useQuery({ queryKey: ["sa-invoices"], queryFn: () => apiGet<Invoice[]>("/superadmin/invoices") });
   const [edit, setEdit] = useState<Plan | null | "new">(null);
   const t = useTable(inv.data, { search: (i) => `${i.org_name} ${i.plan_name} ${i.status}`, initialSort: "date" });
+  const qc = useQueryClient();
+  const decide = useMutation({ mutationFn: (x: { id: string; approve: boolean }) => apiPost<Invoice>(`/superadmin/invoices/${x.id}/decide`, { approve: x.approve }), onSuccess: (i) => { toast.success(`Payment ${i.status}`); qc.invalidateQueries({ queryKey: ["sa-invoices"] }); qc.invalidateQueries({ queryKey: ["sa-orgs"] }); }, onError: toastErr });
+  const waiting = (inv.data ?? []).filter((i) => i.status === "awaiting_approval");
   return (
     <div>
-      <PageHeader title="Subscriptions" subtitle="Plans, seat entitlements and invoices across tenants." badge={<MockBadge label="Payments mocked" />} actions={<Button onClick={() => setEdit("new")} data-testid="create-plan-button"><Plus className="h-4 w-4" /> New plan</Button>} />
+      <PageHeader title="Subscriptions" subtitle="Plans, seat entitlements and invoices across tenants." actions={<Button onClick={() => setEdit("new")} data-testid="create-plan-button"><Plus className="h-4 w-4" /> New plan</Button>} />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {plans.data?.map((p) => (
           <div key={p.id} className="lift rounded-2xl border bg-card p-5" data-testid="sa-plan-card">
             <div className="flex items-center justify-between"><p className="font-heading text-lg font-bold">{p.name}</p>{!p.active && <StatusBadge status="suspended" />}</div>
-            <p className="mt-1 font-heading text-2xl font-extrabold">{money(p.price_monthly, "USD")}<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
-            <p className="text-xs text-muted-foreground">{money(p.price_yearly, "USD")}/yr · {p.seats} seats</p>
+            <p className="mt-1 font-heading text-2xl font-extrabold">{money(p.price_monthly)}<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+            <p className="text-xs text-muted-foreground">{money(p.price_yearly)}/yr · {p.seats} seats</p>
             <ul className="my-3 space-y-1 text-xs text-muted-foreground">{p.features.map((x) => <li key={x}>• {x}</li>)}</ul>
             <Button size="sm" variant="outline" className="w-full" onClick={() => setEdit(p)} data-testid="plan-edit-button">Edit plan</Button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-6 rounded-2xl border bg-card p-4" data-testid="payment-approvals">
+        <p className="mb-2 font-heading font-semibold">Payments awaiting approval ({waiting.length})</p>
+        {waiting.length === 0 && <p className="text-sm text-muted-foreground">No payment screenshots to review.</p>}
+        {waiting.map((i) => (
+          <div key={i.id} className="flex flex-col gap-3 border-t py-3 sm:flex-row sm:items-center" data-testid="payment-approval-row">
+            <a href={i.screenshot_url} target="_blank" rel="noreferrer"><img src={i.screenshot_url} alt="screenshot" className="h-20 w-20 rounded-lg border object-cover" /></a>
+            <div className="flex-1 text-sm"><p className="font-medium">{i.org_name} · {i.plan_name} ({i.cycle}, {i.seats} seats)</p><p className="text-muted-foreground">{money(i.amount)} · ref {i.reference || "—"} · {dateTime(i.date)}</p></div>
+            <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => decide.mutate({ id: i.id, approve: false })} data-testid="payment-reject-button">Reject</Button><Button size="sm" onClick={() => decide.mutate({ id: i.id, approve: true })} data-testid="payment-approve-button">Approve & activate</Button></div>
           </div>
         ))}
       </div>
@@ -244,7 +320,7 @@ export function SuperSubscriptions() {
         <div className="border-b p-3"><Input value={t.q} onChange={(e) => t.setQ(e.target.value)} placeholder="Search invoices" data-testid="invoices-search-input" /></div>
         <Table>
           <TableHeader><TableRow><TableHead><SortHead label="Date" k="date" t={t} /></TableHead><TableHead>Organization</TableHead><TableHead>Plan</TableHead><TableHead className="text-right"><SortHead label="Amount" k="amount" t={t} /></TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
-          <TableBody>{t.rows.map((i) => <TableRow key={i.id}><TableCell>{dateTime(i.date)}</TableCell><TableCell>{i.org_name}</TableCell><TableCell>{i.plan_name} · {i.cycle} · {i.seats} seats</TableCell><TableCell className="text-right">{money(i.amount, "USD")}</TableCell><TableCell><StatusBadge status={i.status} /></TableCell></TableRow>)}</TableBody>
+          <TableBody>{t.rows.map((i) => <TableRow key={i.id}><TableCell>{dateTime(i.date)}</TableCell><TableCell>{i.org_name}</TableCell><TableCell>{i.plan_name} · {i.cycle} · {i.seats} seats</TableCell><TableCell className="text-right">{money(i.amount)}</TableCell><TableCell><StatusBadge status={i.status} /></TableCell></TableRow>)}</TableBody>
         </Table>
         <Pager {...t} />
       </div>
@@ -258,15 +334,17 @@ export function SuperDomains() {
   const q = useOrgs();
   const [vals, setVals] = useState<Record<string, string>>({});
   const m = useMutation({ mutationFn: (x: { id: string; domain: string }) => apiPatch<OrgRow>(`/superadmin/organizations/${x.id}`, { domain: x.domain, reason: "Domain assignment" }), onSuccess: (o) => { toast.success(`Domain for ${o.name}: ${o.domain || "removed"}`); qc.invalidateQueries({ queryKey: ["sa-orgs"] }); }, onError: toastErr });
+  const verify = useMutation({ mutationFn: (id: string) => apiPost<OrgRow>(`/superadmin/organizations/${id}/domain/verify`), onSuccess: (o) => { toast.success(`${o.domain} verified`); qc.invalidateQueries({ queryKey: ["sa-orgs"] }); }, onError: toastErr });
   return (
     <div>
-      <PageHeader title="Domain management" subtitle="One custom domain per organization. Verification and TLS are provisioned by the edge." badge={<MockBadge label="DNS/TLS mocked" />} />
+      <PageHeader title="Domain management" subtitle="One custom domain per organization. Verification and TLS are provisioned by the edge." />
       <div className="rounded-2xl border bg-card">
         <Table>
           <TableHeader><TableRow><TableHead>Organization</TableHead><TableHead>Domain</TableHead><TableHead>Status</TableHead><TableHead>Assign</TableHead></TableRow></TableHeader>
           <TableBody>{q.data?.map((o) => (
             <TableRow key={o.id} data-testid="domain-row"><TableCell className="font-medium">{o.name}</TableCell><TableCell className="font-mono text-xs">{o.domain || "—"}</TableCell><TableCell><StatusBadge status={o.domain_status} /></TableCell>
-              <TableCell><div className="flex gap-1"><Input className="h-8 w-52" placeholder="chat.brand.com" value={vals[o.id] ?? ""} onChange={(e) => setVals({ ...vals, [o.id]: e.target.value })} data-testid="sa-domain-input" /><Button size="sm" disabled={!/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(vals[o.id] ?? "")} onClick={() => m.mutate({ id: o.id, domain: (vals[o.id] ?? "").toLowerCase() })} data-testid="sa-domain-assign">Assign</Button></div></TableCell></TableRow>
+              <TableCell><div className="flex gap-1"><Input className="h-8 w-52" placeholder="chat.brand.com" value={vals[o.id] ?? ""} onChange={(e) => setVals({ ...vals, [o.id]: e.target.value })} data-testid="sa-domain-input" /><Button size="sm" disabled={!/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(vals[o.id] ?? "")} onClick={() => m.mutate({ id: o.id, domain: (vals[o.id] ?? "").toLowerCase() })} data-testid="sa-domain-assign">Assign</Button>{o.domain && o.domain_status !== "verified" && <Button size="sm" variant="outline" onClick={() => verify.mutate(o.id)} data-testid="sa-domain-verify">Mark verified</Button>}</div>
+              {o.domain && <p className="mt-1 font-mono text-[10px] text-muted-foreground">CNAME {o.domain} → edge.talksme.in</p>}</TableCell></TableRow>
           ))}</TableBody>
         </Table>
       </div>
@@ -313,6 +391,12 @@ export function SuperSettings() {
           ))}
           <div className="border-t pt-3"><Label>Default media retention (days)</Label><Input type="number" className="mt-1 w-32" defaultValue={d.default_retention_days} onBlur={(e) => m.mutate({ ...d, default_retention_days: Number(e.target.value) })} data-testid="sa-retention-input" /></div>
           <label className="flex items-center justify-between text-sm"><span>Maintenance mode</span><Checkbox checked={d.maintenance_mode} onCheckedChange={(x) => m.mutate({ ...d, maintenance_mode: !!x })} data-testid="sa-maintenance-checkbox" /></label>
+        </div>
+        <div className="space-y-3 rounded-2xl border bg-card p-5 lg:col-span-2" data-testid="payment-qr-settings">
+          <p className="font-heading font-semibold">Subscription payment (UPI QR)</p>
+          <p className="text-xs text-muted-foreground">Organization admins see this QR when paying for a plan, then upload their payment screenshot for your approval.</p>
+          <ImageInput value={d.payment_qr_url} onChange={(u) => m.mutate({ ...d, payment_qr_url: u })} testid="sa-payment-qr" />
+          <div className="flex gap-2"><Input defaultValue={d.upi_id} placeholder="UPI ID e.g. talksme@upi" onBlur={(e) => e.target.value !== d.upi_id && m.mutate({ ...d, upi_id: e.target.value })} data-testid="sa-upi-input" /></div>
         </div>
         <div className="space-y-3 rounded-2xl border bg-card p-5">
           <p className="font-heading font-semibold">Theme presets</p>

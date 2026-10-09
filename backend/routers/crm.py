@@ -16,6 +16,12 @@ staff = require("employee", "admin")
 STAGES = {"New Lead", "Interested", "Hot Lead", "Converted", "VIP", "Frequent Customer", "Inactive", "Blocked"}
 
 
+async def need_feature(user: dict, key: str) -> None:
+    org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "features": 1})
+    if (org or {}).get("features", {}).get(key) is False:
+        raise HTTPException(403, "This feature is not enabled for your organization. Contact the platform owner.")
+
+
 def scope(user: dict, field: str = "assigned_employee_id") -> dict:
     q = {"org_id": user["org_id"]}
     if user["role"] == "employee":
@@ -108,7 +114,7 @@ async def patch_followup(pid: str, fid: str, body: FollowUpPatch, user: dict = D
 @router.get("/employees", response_model=list[EmployeeStat])
 async def list_employees(user: dict = Depends(staff)):
     out = []
-    async for e in db.users.find({"org_id": user["org_id"], "role": "employee"}, {"_id": 0, "password_hash": 0}).sort("name", 1):
+    async for e in db.users.find({"org_id": user["org_id"], "role": "employee", "deleted": {"$ne": True}}, {"_id": 0, "password_hash": 0}).sort("name", 1):
         e["open_conversations"] = await db.conversations.count_documents({"employee_id": e["id"], "status": "open"})
         e["total_conversations"] = await db.conversations.count_documents({"employee_id": e["id"]})
         e["deposits_total"] = sum([d["amount"] async for d in db.deposits.find({"employee_id": e["id"], "status": {"$ne": "Reversed"}}, {"amount": 1})])
@@ -133,6 +139,7 @@ async def list_deposits(status: str = "", q: str = "", customer_id: str = "", us
 @router.post("/deposits", response_model=Deposit)
 async def record_deposit(body: DepositIn, user: dict = Depends(staff)):
     p = await get_profile(user, body.customer_id)
+    await need_feature(user, "deposits")
     if await db.deposits.find_one({"org_id": user["org_id"], "reference": body.reference}):
         raise HTTPException(409, "A deposit with this transaction reference already exists")
     emp_id = p.get("assigned_employee_id") if user["role"] == "admin" and p.get("assigned_employee_id") else user["id"]

@@ -61,6 +61,7 @@ class Organization(Base):
     retention_days: int = 90
     created_at: str
     trial_ends: Optional[str] = None
+    features: dict[str, bool] = {}
 
 
 class OrgBrandingUpdate(BaseModel):
@@ -467,6 +468,22 @@ class Invoice(Base):
     amount: float
     status: str
     date: str
+    screenshot_url: str = ""
+    reference: str = ""
+
+
+class ProofIn(BaseModel):
+    screenshot_url: str = Field(min_length=10)
+    reference: str = Field("", max_length=80)
+
+
+class PasswordIn(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8)
+
+
+class ResetPwIn(BaseModel):
+    password: str = Field(min_length=8)
 
 
 class BillingChangeIn(BaseModel):
@@ -481,6 +498,8 @@ class Billing(Base):
     plans: list[Plan]
     invoices: list[Invoice]
     seats_used: int
+    payment_qr_url: str = ""
+    upi_id: str = ""
 
 
 # ---------- super admin ----------
@@ -500,6 +519,7 @@ class OrgPatch(BaseModel):
     seats: Optional[int] = Field(None, ge=1)
     plan_id: Optional[str] = None
     domain: Optional[str] = None
+    features: Optional[dict[str, bool]] = None
     reason: str = Field("", max_length=300)
 
 
@@ -540,6 +560,8 @@ class PlatformSettings(Base):
     theme_presets: list[dict[str, str]]
     default_retention_days: int = 90
     maintenance_mode: bool = False
+    payment_qr_url: str = ""
+    upi_id: str = ""
 
 
 class Analytics(Base):

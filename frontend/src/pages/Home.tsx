@@ -9,8 +9,8 @@ const FEATURES = [
   { icon: LayoutTemplate, t: "Landing-page builder", d: "Image-selection and direct-chat templates with employee routing." },
   { icon: Shuffle, t: "Assignment engine", d: "Fixed, round-robin, least-busy, manual and team-queue routing." },
   { icon: Wallet, t: "Deposit ledger", d: "Manual sales tracking with review, dispute, reversal and an append-only audit trail." },
-  { icon: Phone, t: "Audio calling", d: "Call flows with permissions per page. WebRTC is simulated in this preview." },
-  { icon: CreditCard, t: "Seat-based billing", d: "Monthly & yearly plans with webhook-verified status changes." },
+  { icon: Phone, t: "Audio calling", d: "Real in-browser WebRTC audio calls with permissions per page." },
+  { icon: CreditCard, t: "Seat-based billing", d: "Monthly & yearly plans in ₹ with UPI QR payment and approval." },
 ];
 
 export default function Home() {
@@ -35,14 +35,13 @@ export default function Home() {
         <div className="bg-brand pointer-events-none absolute -right-32 -top-32 h-[520px] w-[520px] rounded-full opacity-25 blur-3xl" />
         <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 lg:grid-cols-[1.05fr_0.95fr] lg:py-24">
           <div className="animate-rise">
-            <MockBadge label="Preview build · not production-ready" />
+            <MockBadge label="Private & secure business chat" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700" />
             <h1 className="mt-5 font-heading text-[44px] font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-6xl">
               Every customer chat,<br /><span className="text-brand">every sale,</span> one CRM.
             </h1>
             <p className="mt-5 max-w-xl text-lg text-muted-foreground">talksme.in OmniChat brings WhatsApp-style messaging, multi-employee CRM, landing pages and a manual deposit ledger into one white-label platform — with a single app for your customers.</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/demo" className={cn(buttonVariants({ size: "lg" }), "bg-brand h-12 px-6 text-white")} data-testid="home-hero-demo-button">Try the interactive demo</Link>
-              <Link to="/p/talksme/support" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-12 px-6")} data-testid="home-hero-chat-button">Chat as a visitor</Link>
             </div>
             <div className="mt-10 flex flex-wrap gap-8 text-sm">
               {[["3", "demo orgs"], ["50", "conversations"], ["30", "deposits"], ["4", "role layers"]].map(([n, l]) => (

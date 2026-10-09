@@ -24,3 +24,8 @@ Credentials: see memory/test_credentials.md. All demo passwords `Demo@123`.
 
 ## MOCKED
 WebRTC calls (state simulation + call log), payments/webhooks, push notifications, Meta Pixel (console + on-page log, consent-gated), DNS/TLS verification, SMS OTP delivery, media storage (small images as data URLs, others sample URLs), realtime (polling 3–4s).
+
+## Stabilisation notes (latest)
+- Customer OTP: always a real BlackSMS WhatsApp OTP, no demo bypass (owner decision). If BlackSMS balance is low, OTP fails with a clear error. Customer email login (customer@talksme.in / Demo@123) still works.
+- Uploads: 9 MB limit checked in the UI (media.tsx/ChatThread) and on the server (POST messages returns 413 above 9 MB; signature max_bytes=9437184).
+- WebRTC call checked with two browsers: ring -> accept -> connected -> end.

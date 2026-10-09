@@ -16,14 +16,14 @@ import { endSession } from "@/lib/session";
 import type { Ok, Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type NavItem = { to: string; label: string; icon: typeof Inbox; end?: boolean };
+type NavItem = { to: string; label: string; icon: typeof Inbox; end?: boolean; feature?: string };
 const NAV: Record<Exclude<Role, "customer">, NavItem[]> = {
   employee: [
     { to: "/employee", label: "Dashboard", icon: LayoutDashboard, end: true },
     { to: "/employee/inbox", label: "Inbox", icon: MessagesSquare },
     { to: "/employee/customers", label: "Customers", icon: Contact },
-    { to: "/employee/deposits", label: "Deposits", icon: Wallet },
-    { to: "/employee/analytics", label: "Analytics", icon: BarChart3 },
+    { to: "/employee/deposits", label: "Deposits", icon: Wallet, feature: "deposits" },
+    { to: "/employee/analytics", label: "Analytics", icon: BarChart3, feature: "advanced_analytics" },
     { to: "/employee/settings", label: "Settings", icon: Settings },
   ],
   admin: [
@@ -31,11 +31,10 @@ const NAV: Record<Exclude<Role, "customer">, NavItem[]> = {
     { to: "/admin/conversations", label: "Conversations", icon: MessagesSquare },
     { to: "/admin/employees", label: "Employees", icon: Users },
     { to: "/admin/customers", label: "Customers", icon: Contact },
-    { to: "/admin/landing-pages", label: "Landing pages", icon: LayoutTemplate },
-    { to: "/admin/deposits", label: "Deposit ledger", icon: Wallet },
-    { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-    { to: "/admin/broadcasts", label: "Broadcasts", icon: Megaphone },
-    { to: "/admin/domains", label: "Domain", icon: Globe },
+    { to: "/admin/landing-pages", label: "Landing pages", icon: LayoutTemplate, feature: "landing_builder" },
+    { to: "/admin/deposits", label: "Deposit ledger", icon: Wallet, feature: "deposits" },
+    { to: "/admin/analytics", label: "Analytics", icon: BarChart3, feature: "advanced_analytics" },
+    { to: "/admin/broadcasts", label: "Broadcasts", icon: Megaphone, feature: "broadcasts" },
     { to: "/admin/billing", label: "Billing", icon: CreditCard },
     { to: "/admin/settings", label: "Settings", icon: Settings },
   ],
@@ -129,7 +128,7 @@ export function AppShell({ role }: { role: Exclude<Role, "customer"> }) {
   const me = useMe();
   const org = useStaffOrg(role !== "superadmin" && !!me.data);
   const [open, setOpen] = useState(false);
-  const items = NAV[role];
+  const items = NAV[role].filter((i) => !i.feature || org.data?.features?.[i.feature] !== false);
   const brandStyle = org.data ? ({ "--primary": org.data.primary_color, "--sidebar-accent-foreground": org.data.primary_color } as CSSProperties) : undefined;
   const roleLabel = { employee: "Employee", admin: "Admin", superadmin: "Super Admin" }[role];
 
@@ -142,7 +141,7 @@ export function AppShell({ role }: { role: Exclude<Role, "customer"> }) {
       </div>
       <SideNav items={items} onNav={() => setOpen(false)} />
       <div className="mt-auto rounded-xl border p-3 text-xs text-muted-foreground">
-        Preview mode · realtime via polling · calls, billing, push &amp; pixel are <b className="text-amber-600 dark:text-amber-400">mocked</b>.
+        <ShieldCheck className="mb-1 h-4 w-4 text-emerald-500" />Your chats and customer data are private &amp; secure — encrypted in transit and isolated per organization.
       </div>
     </div>
   );

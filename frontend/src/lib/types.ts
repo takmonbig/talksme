@@ -11,7 +11,7 @@ export interface EmployeeStat extends User { open_conversations: number; total_c
 export interface Organization {
   id: string; name: string; slug: string; domain: string; domain_status: string; plan_id: string; billing_cycle: string;
   seats: number; status: string; primary_color: string; accent_color: string; font: string; logo_url: string; banner_url: string;
-  retention_days: number; created_at: string; trial_ends: string | null;
+  retention_days: number; created_at: string; trial_ends: string | null; features: Record<string, boolean>;
 }
 export interface OrgRow extends Organization { plan_name: string; employees: number; customers: number; conversations: number; deposits_total: number; mrr: number }
 
@@ -69,11 +69,11 @@ export interface Broadcast {
   recipients: number; delivered: number; read: number; opted_out: number; created_at: string;
 }
 export interface Plan { id: string; name: string; price_monthly: number; price_yearly: number; seats: number; features: string[]; active: boolean }
-export interface Invoice { id: string; org_id: string; org_name: string; plan_name: string; cycle: string; seats: number; amount: number; status: string; date: string }
-export interface Billing { org: Organization; plan: Plan; plans: Plan[]; invoices: Invoice[]; seats_used: number }
+export interface Invoice { id: string; org_id: string; org_name: string; plan_name: string; cycle: string; seats: number; amount: number; status: string; date: string; screenshot_url: string; reference: string }
+export interface Billing { org: Organization; plan: Plan; plans: Plan[]; invoices: Invoice[]; seats_used: number; payment_qr_url: string; upi_id: string }
 export interface AuditLog { id: string; org_id: string | null; actor_name: string; actor_role: string; action: string; resource: string; reason: string; at: string }
 export interface PlatformSettings {
-  feature_flags: Record<string, boolean>; theme_presets: Record<string, string>[]; default_retention_days: number; maintenance_mode: boolean;
+  feature_flags: Record<string, boolean>; theme_presets: Record<string, string>[]; default_retention_days: number; maintenance_mode: boolean; payment_qr_url: string; upi_id: string;
 }
 export interface Analytics {
   kpis: Record<string, number>;
@@ -86,3 +86,8 @@ export interface Overview {
   kpis: Record<string, number>; orgs: OrgRow[]; health: { name: string; status: string }[];
 }
 export interface Ok { ok: boolean; message: string }
+export interface EmployeeDetails {
+  employee: User; conversations: { id: string; customer_name: string; customer_phone: string; last_message: string; last_message_at: string; landing_title: string }[];
+  deposits: Deposit[]; customers: number; calls: number; activity: AuditLog[];
+}
+export interface OrgDetails { org: OrgRow; staff: EmployeeStat[]; landing_pages: { id: string; title: string; slug: string; published: boolean; views: number; leads: number }[]; invoices: Invoice[] }

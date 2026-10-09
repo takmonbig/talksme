@@ -57,7 +57,7 @@ export function InboxWorkspace({ mode }: { mode: "employee" | "admin" }) {
   const list = useQuery({
     queryKey: ["conversations", mode, filter, q],
     queryFn: () => apiGet<Conversation[]>(`/conversations?filter=${filter}&q=${encodeURIComponent(q)}`),
-    refetchInterval: 4000,
+    refetchInterval: 20000,
   });
   const conv = list.data?.find((c) => c.id === selected) ?? null;
   const sel = useQuery({ queryKey: ["conversation", selected], queryFn: () => apiGet<Conversation>(`/conversations/${selected}`), enabled: !!selected && !conv, refetchInterval: 4000 });
@@ -76,7 +76,7 @@ export function InboxWorkspace({ mode }: { mode: "employee" | "admin" }) {
         <div className="space-y-3 border-b p-3">
           <div className="flex items-center justify-between">
             <h2 className="font-heading text-lg font-bold">{mode === "admin" ? "Conversations" : "Chats"}</h2>
-            <MockBadge label="Realtime: polling" />
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600" data-testid="realtime-live-badge"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Live</span>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -134,9 +134,6 @@ export function InboxWorkspace({ mode }: { mode: "employee" | "admin" }) {
                     <DropdownMenuItem onClick={() => patch.mutate({ archived: !active.archived })} data-testid="menu-archive"><Archive className="h-4 w-4" />{active.archived ? "Unarchive" : "Archive"}</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => patch.mutate({ muted: !active.muted })} data-testid="menu-mute"><BellOff className="h-4 w-4" />{active.muted ? "Unmute" : "Mute"}</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => patch.mutate({ follow_up: !active.follow_up })} data-testid="menu-followup"><Flag className="h-4 w-4" />{active.follow_up ? "Clear follow-up" : "Mark follow-up"}</DropdownMenuItem>
-                    {mode === "employee" && active.calls_enabled && (
-                      <><DropdownMenuSeparator /><DropdownMenuItem onClick={() => document.getElementById(`incoming-${active.id}`)?.click()} data-testid="menu-simulate-incoming-call"><PhoneIncoming className="h-4 w-4" />Simulate incoming call</DropdownMenuItem></>
-                    )}
                     {mode === "admin" && (
                       <><DropdownMenuSeparator /><DropdownMenuItem onClick={() => setAssign(true)} data-testid="menu-reassign"><Shuffle className="h-4 w-4" />Reassign</DropdownMenuItem></>
                     )}

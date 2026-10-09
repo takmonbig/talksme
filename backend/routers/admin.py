@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from lib.auth import PUBLIC_USER, hash_pw, require
 from lib.db import db
 from lib.util import audit, new_id, now_iso
-from models.schemas import (AuditLog, Billing, BillingChangeIn, Broadcast, BroadcastIn, DomainIn, EmployeeIn, EmployeePatch,
+from routers.crm import need_feature
+from models.schemas import (AuditLog, Billing, BillingChangeIn, Broadcast, BroadcastIn, EmployeeIn, EmployeePatch, ProofIn, ResetPwIn,
                             Invoice, LandingPage, LandingPageIn, Ok, Organization, OrgBrandingUpdate, User)
 
 router = APIRouter(prefix="/admin")
@@ -22,7 +23,7 @@ async def org_of(user: dict) -> dict:
 @router.post("/employees", response_model=User)
 async def create_employee(body: EmployeeIn, user: dict = Depends(admin)):
     org = await org_of(user)
-    used = await db.users.count_documents({"org_id": org["id"], "role": "employee", "active": True})
+    used = await db.users.count_documents({"org_id": org["id"], "role": "employee", "active": True, "deleted": {"$ne": True}})
     if used >= org["seats"]:
         raise HTTPException(402, f"All {org['seats']} seats are in use. Add seats in Billing.")
     if await db.users.find_one({"email": body.email.lower()}):
@@ -53,6 +54,42 @@ async def patch_employee(eid: str, body: EmployeePatch, user: dict = Depends(adm
     return User(**{**emp, **upd})
 
 
+async def _emp(user: dict, eid: str) -> dict:
+    emp = await db.users.find_one({"id": eid, "org_id": user["org_id"], "role": "employee", "deleted": {"$ne": True}}, PUBLIC_USER)
+    if not emp:
+        raise HTTPException(404, "Employee not found")
+    return emp
+
+
+@router.get("/employees/{eid}/details", response_model=dict)
+async def employee_details(eid: str, user: dict = Depends(admin)):
+    emp = await _emp(user, eid)
+    convs = await db.conversations.find({"employee_id": eid}, {"_id": 0, "id": 1, "customer_name": 1, "customer_phone": 1, "last_message": 1,
+                                                              "last_message_at": 1, "landing_title": 1}).sort("last_message_at", -1).to_list(500)
+    deps = await db.deposits.find({"employee_id": eid}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    custs = await db.customer_profiles.count_documents({"assigned_employee_id": eid})
+    calls = await db.calls.count_documents({"conversation_id": {"$in": [c["id"] for c in convs]}})
+    logs = await db.audit_logs.find({"actor_id": eid}, {"_id": 0}).sort("at", -1).to_list(30)
+    return {"employee": emp, "conversations": convs, "deposits": deps, "customers": custs, "calls": calls, "activity": logs}
+
+
+@router.post("/employees/{eid}/reset-password", response_model=Ok)
+async def reset_employee_password(eid: str, body: ResetPwIn, user: dict = Depends(admin)):
+    emp = await _emp(user, eid)
+    await db.users.update_one({"id": eid}, {"$set": {"password_hash": hash_pw(body.password)}})
+    await audit(user, "employee.password_reset", f"user:{emp['email']}", user["org_id"])
+    return Ok(message=f"Password reset for {emp['name']}")
+
+
+@router.delete("/employees/{eid}", response_model=Ok)
+async def delete_employee(eid: str, user: dict = Depends(admin)):
+    """Removes the login and frees the seat. Conversations, customers and deposits are retained for the organization."""
+    emp = await _emp(user, eid)
+    await db.users.update_one({"id": eid}, {"$set": {"deleted": True, "active": False, "status": "offline", "email": f"deleted+{eid}@removed.local"}})
+    await audit(user, "employee.deleted", f"user:{emp['email']}", user["org_id"])
+    return Ok(message=f"{emp['name']} removed. Their records are kept.")
+
+
 # ---------- landing pages ----------
 @router.get("/landing-pages", response_model=list[LandingPage])
 async def list_lps(user: dict = Depends(admin)):
@@ -60,6 +97,7 @@ async def list_lps(user: dict = Depends(admin)):
 
 
 async def _validate_lp(user: dict, body: LandingPageIn, lp_id: str | None) -> None:
+    await need_feature(user, "landing_builder")
     dup = await db.landing_pages.find_one({"org_id": user["org_id"], "slug": body.slug, "id": {"$ne": lp_id}})
     if dup:
         raise HTTPException(409, "Another page already uses this path")
@@ -129,6 +167,7 @@ async def audience(segment: str = "all", user: dict = Depends(admin)):
 
 @router.post("/broadcasts", response_model=Broadcast)
 async def create_broadcast(body: BroadcastIn, user: dict = Depends(admin)):
+    await need_feature(user, "broadcasts")
     t = time.time()
     recent = [x for x in _bc_rate.get(user["org_id"], []) if t - x < 3600]
     if len(recent) >= 5:
@@ -161,26 +200,6 @@ async def update_org(body: OrgBrandingUpdate, user: dict = Depends(admin)):
     return await org_of(user)
 
 
-@router.put("/org/domain", response_model=Organization)
-async def set_domain(body: DomainIn, user: dict = Depends(admin)):
-    if await db.organizations.find_one({"domain": body.domain, "id": {"$ne": user["org_id"]}}):
-        raise HTTPException(409, "Domain is already used by another organization")
-    await db.organizations.update_one({"id": user["org_id"]}, {"$set": {"domain": body.domain, "domain_status": "pending"}})
-    await audit(user, "domain.set", body.domain, user["org_id"])
-    return await org_of(user)
-
-
-@router.post("/org/domain/verify", response_model=Organization)
-async def verify_domain(user: dict = Depends(admin)):
-    """MOCKED: production checks the DNS CNAME/TXT records and provisions TLS."""
-    org = await org_of(user)
-    if not org.get("domain"):
-        raise HTTPException(400, "Configure a domain first")
-    await db.organizations.update_one({"id": org["id"]}, {"$set": {"domain_status": "verified"}})
-    await audit(user, "domain.verified (mocked)", org["domain"], org["id"])
-    return await org_of(user)
-
-
 @router.get("/audit-logs", response_model=list[AuditLog])
 async def org_audit(user: dict = Depends(admin)):
     return await db.audit_logs.find({"org_id": user["org_id"]}, {"_id": 0}).sort("at", -1).to_list(200)
@@ -194,7 +213,8 @@ async def billing(user: dict = Depends(admin)):
     plan = await db.plans.find_one({"id": org["plan_id"]}, {"_id": 0})
     inv = await db.invoices.find({"org_id": org["id"]}, {"_id": 0}).sort("date", -1).to_list(100)
     used = await db.users.count_documents({"org_id": org["id"], "role": "employee", "active": True})
-    return Billing(org=org, plan=plan, plans=plans, invoices=inv, seats_used=used)
+    ps = await db.platform_settings.find_one({"id": "platform"}, {"_id": 0}) or {}
+    return Billing(org=org, plan=plan, plans=plans, invoices=inv, seats_used=used, payment_qr_url=ps.get("payment_qr_url", ""), upi_id=ps.get("upi_id", ""))
 
 
 @router.post("/billing/change", response_model=Invoice)
@@ -216,19 +236,16 @@ async def change_plan(body: BillingChangeIn, user: dict = Depends(admin)):
     return Invoice(**inv)
 
 
-@router.post("/billing/invoices/{iid}/simulate-webhook", response_model=Invoice)
-async def simulate_webhook(iid: str, success: bool = True, user: dict = Depends(admin)):
-    """MOCKED provider webhook. Subscription changes only on a (simulated) verified webhook, never on redirect."""
+@router.post("/billing/invoices/{iid}/proof", response_model=Invoice)
+async def upload_proof(iid: str, body: ProofIn, user: dict = Depends(admin)):
+    """Admin paid via the platform QR and uploads the screenshot; Super Admin approves to activate."""
     inv = await db.invoices.find_one({"id": iid, "org_id": user["org_id"]}, {"_id": 0})
-    if not inv or inv["status"] != "pending":
-        raise HTTPException(400, "Invoice is not pending")
-    status = "paid" if success else "failed"
-    await db.invoices.update_one({"id": iid}, {"$set": {"status": status}})
-    if success:
-        await db.organizations.update_one({"id": user["org_id"]}, {"$set": {"plan_id": inv["plan_id"], "billing_cycle": inv["cycle"],
-                                                                             "seats": inv["seats"], "status": "active"}})
-    await audit(user, f"billing.webhook_{status} (mocked)", f"invoice:{iid}", user["org_id"])
-    return Invoice(**{**inv, "status": status})
+    if not inv or inv["status"] not in ("pending", "rejected"):
+        raise HTTPException(400, "Invoice is not awaiting payment")
+    upd = {"status": "awaiting_approval", "screenshot_url": body.screenshot_url, "reference": body.reference}
+    await db.invoices.update_one({"id": iid}, {"$set": upd})
+    await audit(user, "billing.payment_proof_uploaded", f"invoice:{iid}", user["org_id"])
+    return Invoice(**{**inv, **upd})
 
 
 @router.post("/billing/cancel", response_model=Ok)

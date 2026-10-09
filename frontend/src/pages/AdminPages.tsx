@@ -15,9 +15,11 @@ import { Avatar, EmptyState, ErrorState, MockBadge, PageHeader, Pager, Skeleton,
 import { InboxWorkspace } from "@/components/InboxWorkspace";
 import { LandingRender, LP_FONTS } from "@/components/LandingRender";
 import { AnalyticsView, CustomersView, DepositsView } from "@/components/crm/Views";
-import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
+import { ImageInput, uploadFile } from "@/lib/media";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { dateTime, money, toastErr, uid } from "@/lib/hooks";
-import type { AuditLog, Billing, Broadcast, EmployeeStat, Invoice, LandingPage, LandingPageInput, Organization, Routing, Transfer, User } from "@/lib/types";
+import type { EmployeeDetails, Ok, AuditLog, Billing, Broadcast, EmployeeStat, Invoice, LandingPage, LandingPageInput, Organization, Routing, Transfer, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function PendingTransfers() {
@@ -80,10 +82,68 @@ function NewEmployeeDialog({ open, onOpenChange }: { open: boolean; onOpenChange
   );
 }
 
+export function ChangePassword() {
+  const [f, setF] = useState({ current_password: "", new_password: "" });
+  const m = useMutation({ mutationFn: () => apiPatch<Ok>("/auth/password", f), onSuccess: (r) => { toast.success(r.message); setF({ current_password: "", new_password: "" }); }, onError: toastErr });
+  return (
+    <div className="space-y-3 rounded-2xl border bg-card p-5" data-testid="change-password-card">
+      <p className="font-heading font-semibold">Change my password</p>
+      <Input type="password" placeholder="Current password" value={f.current_password} onChange={(e) => setF({ ...f, current_password: e.target.value })} data-testid="current-password-input" />
+      <Input type="password" placeholder="New password (min 8)" value={f.new_password} onChange={(e) => setF({ ...f, new_password: e.target.value })} data-testid="new-password-input" />
+      <Button disabled={!f.current_password || f.new_password.length < 8 || m.isPending} onClick={() => m.mutate()} data-testid="change-password-submit">Update password</Button>
+    </div>
+  );
+}
+
+export function ResetPasswordDialog({ name, endpoint, onClose }: { name: string; endpoint: string; onClose: () => void }) {
+  const [pw, setPw] = useState("");
+  const m = useMutation({ mutationFn: () => apiPost<Ok>(endpoint, { password: pw }), onSuccess: (r) => { toast.success(r.message); onClose(); }, onError: toastErr });
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent data-testid="reset-password-dialog">
+        <DialogHeader><DialogTitle>Reset password · {name}</DialogTitle><DialogDescription>Share the new password securely. The action is recorded in the audit log.</DialogDescription></DialogHeader>
+        <Input type="text" placeholder="New password (min 8 characters)" value={pw} onChange={(e) => setPw(e.target.value)} data-testid="reset-password-input" />
+        <DialogFooter><Button disabled={pw.length < 8 || m.isPending} onClick={() => m.mutate()} data-testid="reset-password-submit">Reset password</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EmployeeDetailSheet({ id, onClose }: { id: string; onClose: () => void }) {
+  const d = useQuery({ queryKey: ["employee-details", id], queryFn: () => apiGet<EmployeeDetails>(`/admin/employees/${id}/details`) });
+  const e = d.data?.employee;
+  return (
+    <Sheet open onOpenChange={(o) => !o && onClose()}>
+      <SheetContent className="w-[420px] overflow-y-auto p-5 sm:max-w-[420px]" data-testid="employee-details-sheet"><SheetTitle className="sr-only">Employee details</SheetTitle>
+        {!e ? <Skeleton className="h-64" /> : (
+          <div className="space-y-5 text-sm">
+            <div className="flex items-center gap-3"><Avatar name={e.name} src={e.avatar} size={56} status={e.status} /><div><p className="font-heading text-lg font-semibold">{e.name}</p><p className="text-xs text-muted-foreground">{e.email} · {e.title}</p><p className="text-xs text-muted-foreground">{e.active ? "Active" : "Inactive"} · {e.verified ? "Verified" : "Unverified"} · calls {e.calls_enabled ? "on" : "off"}</p></div></div>
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="rounded-lg bg-muted p-2"><p className="text-lg font-bold">{d.data!.conversations.length}</p>chats</div>
+              <div className="rounded-lg bg-muted p-2"><p className="text-lg font-bold">{d.data!.customers}</p>customers</div>
+              <div className="rounded-lg bg-muted p-2"><p className="text-lg font-bold">{d.data!.calls}</p>calls</div>
+            </div>
+            <div><p className="mb-1 font-semibold">Deposits ({money(d.data!.deposits.filter((x) => x.status !== "Reversed").reduce((a, x) => a + x.amount, 0))})</p>
+              {d.data!.deposits.slice(0, 10).map((x) => <div key={x.id} className="flex justify-between border-b py-1 text-xs"><span>{x.customer_name} · {x.product}</span><span>{money(x.amount)} <StatusBadge status={x.status} /></span></div>)}</div>
+            <div><p className="mb-1 font-semibold">Conversations</p>
+              {d.data!.conversations.slice(0, 15).map((c) => <div key={c.id} className="border-b py-1 text-xs"><b>{c.customer_name}</b> · {c.customer_phone}<p className="truncate text-muted-foreground">{c.last_message}</p></div>)}</div>
+            <div><p className="mb-1 font-semibold">Recent activity</p>
+              {d.data!.activity.map((l) => <p key={l.id} className="text-xs text-muted-foreground"><span className="font-mono">{l.action}</span> · {dateTime(l.at)}</p>)}</div>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export function AdminEmployees() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<{ id: string; v: string } | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
+  const [reset, setReset] = useState<EmployeeStat | null>(null);
+  const [del, setDel] = useState<EmployeeStat | null>(null);
+  const remove = useMutation({ mutationFn: (id: string) => apiDelete<Ok>(`/admin/employees/${id}`), onSuccess: (r) => { toast.success(r.message); setDel(null); qc.invalidateQueries({ queryKey: ["employees"] }); }, onError: toastErr });
   const q = useQuery({ queryKey: ["employees"], queryFn: () => apiGet<EmployeeStat[]>("/employees") });
   const org = useQuery({ queryKey: ["org"], queryFn: () => apiGet<Organization>("/org") });
   const m = useMutation({
@@ -101,7 +161,7 @@ export function AdminEmployees() {
         <div className="border-b p-3"><Input value={t.q} onChange={(e) => t.setQ(e.target.value)} placeholder="Search employees" data-testid="employees-search-input" /></div>
         {q.isError ? <div className="p-4"><ErrorState onRetry={() => q.refetch()} /></div> : (
           <Table>
-            <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead className="hidden md:table-cell">Open / total</TableHead><TableHead className="text-right">Deposits</TableHead><TableHead className="hidden lg:table-cell">Target</TableHead><TableHead>Verified</TableHead><TableHead>Calls</TableHead><TableHead>Active</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead className="hidden md:table-cell">Open / total</TableHead><TableHead className="text-right">Deposits</TableHead><TableHead className="hidden lg:table-cell">Target</TableHead><TableHead>Verified</TableHead><TableHead>Calls</TableHead><TableHead>Active</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody>
               {q.isLoading && <TableRow><TableCell colSpan={7}><Skeleton className="h-10" /></TableCell></TableRow>}
               {t.rows.map((e) => (
@@ -117,6 +177,11 @@ export function AdminEmployees() {
                   <TableCell><Checkbox checked={e.verified} onCheckedChange={(v) => m.mutate({ id: e.id, b: { verified: !!v } })} data-testid="employee-verified-checkbox" /></TableCell>
                   <TableCell><Checkbox checked={e.calls_enabled} onCheckedChange={(v) => m.mutate({ id: e.id, b: { calls_enabled: !!v } })} data-testid="employee-calls-checkbox" /></TableCell>
                   <TableCell><Button size="xs" variant={e.active ? "outline" : "default"} onClick={() => m.mutate({ id: e.id, b: { active: !e.active } })} data-testid="employee-active-toggle">{e.active ? "Deactivate" : "Activate"}</Button></TableCell>
+                  <TableCell><div className="flex gap-1">
+                    <Button size="xs" variant="ghost" onClick={() => setDetail(e.id)} data-testid="employee-details-button">Details</Button>
+                    <Button size="xs" variant="ghost" onClick={() => setReset(e)} data-testid="employee-reset-password-button">Reset password</Button>
+                    <Button size="xs" variant="ghost" className="text-destructive" onClick={() => setDel(e)} data-testid="employee-delete-button"><Trash2 className="h-3.5 w-3.5" /></Button>
+                  </div></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -125,6 +190,14 @@ export function AdminEmployees() {
         <Pager {...t} />
       </div>
       <NewEmployeeDialog open={open} onOpenChange={setOpen} />
+      {detail && <EmployeeDetailSheet id={detail} onClose={() => setDetail(null)} />}
+      {reset && <ResetPasswordDialog name={reset.name} endpoint={`/admin/employees/${reset.id}/reset-password`} onClose={() => setReset(null)} />}
+      <Dialog open={!!del} onOpenChange={(o) => !o && setDel(null)}>
+        <DialogContent data-testid="delete-employee-dialog">
+          <DialogHeader><DialogTitle>Delete {del?.name}?</DialogTitle><DialogDescription>Their login is removed and the seat is freed. Conversations, customers and deposits stay with your organization — reassign them from Conversations.</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="outline" onClick={() => setDel(null)}>Cancel</Button><Button variant="destructive" disabled={remove.isPending} onClick={() => del && remove.mutate(del.id)} data-testid="delete-employee-confirm">Delete employee</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -192,8 +265,8 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
             <div className="space-y-1"><Label>Font</Label>
               <Select value={f.font} onValueChange={(v: string) => set("font", v)}><SelectTrigger className="w-full" data-testid="builder-font-select"><SelectValue /></SelectTrigger><SelectContent>{LP_FONTS.map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select>
             </div>
-            <div className="space-y-1"><Label>Logo URL</Label><Input value={f.logo_url} onChange={(e) => set("logo_url", e.target.value)} placeholder="https://…" data-testid="builder-logo-input" /></div>
-            <div className="space-y-1"><Label>Banner image URL</Label><Input value={f.banner_url} onChange={(e) => set("banner_url", e.target.value)} data-testid="builder-banner-input" /></div>
+            <div className="space-y-1"><Label>Logo URL</Label><ImageInput value={f.logo_url} onChange={(v) => set("logo_url", v)} testid="builder-logo" /></div>
+            <div className="space-y-1"><Label>Banner image URL</Label><ImageInput value={f.banner_url} onChange={(v) => set("banner_url", v)} testid="builder-banner" /></div>
             {f.template === "A" && (
               <div className="space-y-2">
                 <Label>Selectable images → employee</Label>
@@ -215,7 +288,10 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
                     <Button key={e.id} size="xs" variant="outline" onClick={() => set("images", [...f.images, { id: uid(), url: e.avatar || "https://i.pravatar.cc/300", label: e.name, employee_id: e.id }])} data-testid="builder-add-image">+ {e.name}</Button>
                   ))}
                 </div>
-                <p className="text-[11px] text-muted-foreground">Image upload uses URLs in preview — object storage is mocked.</p>
+                <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted" data-testid="builder-upload-image">
+                  <Plus className="h-3 w-3" /> Upload custom image
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; e.target.value = ""; if (!file) return; try { const a = await uploadFile(file); set("images", [...f.images, { id: uid(), url: a.url, label: "Team member", employee_id: null }]); toast.success("Image uploaded — map it to an employee"); } catch (err) { toast.error((err as Error).message); } }} />
+                </label>
               </div>
             )}
           </TabsContent>
@@ -236,7 +312,7 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
                 <Avatar name={e.name} src={e.avatar} size={24} status={e.status} />{e.name}<span className="ml-auto text-xs text-muted-foreground">{e.open_conversations} open</span>
               </label>
             ))}
-            <label className="flex items-center gap-2 border-t pt-3 text-sm"><Checkbox checked={f.calls_enabled} onCheckedChange={(v) => set("calls_enabled", !!v)} data-testid="builder-calls-checkbox" /> Enable audio calling on this page <MockBadge /></label>
+            <label className="flex items-center gap-2 border-t pt-3 text-sm"><Checkbox checked={f.calls_enabled} onCheckedChange={(v) => set("calls_enabled", !!v)} data-testid="builder-calls-checkbox" /> Enable audio calling on this page</label>
           </TabsContent>
           <TabsContent value="pixel" className="space-y-3 pt-3">
             <div className="space-y-1"><Label>Meta Pixel ID</Label><Input value={f.pixel_id} onChange={(e) => set("pixel_id", e.target.value.replace(/\D/g, ""))} placeholder="e.g. 123456789012345" data-testid="builder-pixel-input" /></div>
@@ -357,33 +433,6 @@ export function AdminBroadcasts() {
   );
 }
 
-// ---------------- domain ----------------
-export function AdminDomains() {
-  const qc = useQueryClient();
-  const org = useQuery({ queryKey: ["org"], queryFn: () => apiGet<Organization>("/org") });
-  const [domain, setDomain] = useState("");
-  const done = (o: Organization) => { qc.setQueryData(["org"], o); toast.success(`Domain ${o.domain_status}`); };
-  const set = useMutation({ mutationFn: () => apiPut<Organization>("/admin/org/domain", { domain: domain.trim().toLowerCase() }), onSuccess: done, onError: toastErr });
-  const verify = useMutation({ mutationFn: () => apiPost<Organization>("/admin/org/domain/verify"), onSuccess: done, onError: toastErr });
-  const o = org.data;
-  return (
-    <div className="max-w-3xl">
-      <PageHeader title="Custom domain" subtitle="Each organization has one domain with multiple landing-page paths." badge={<MockBadge label="DNS & TLS mocked" />} />
-      <div className="space-y-4 rounded-2xl border bg-card p-5">
-        <div className="flex items-center gap-3"><Globe className="h-5 w-5 text-primary" /><p className="font-mono text-lg" data-testid="current-domain">{o?.domain || "Not configured"}</p>{o && <StatusBadge status={o.domain_status} testid="domain-status-badge" />}</div>
-        <div className="flex gap-2"><Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="chat.yourbrand.com" data-testid="domain-input" /><Button disabled={!/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(domain.trim()) || set.isPending} onClick={() => set.mutate()} data-testid="domain-save-button">Save domain</Button></div>
-        {o?.domain && (
-          <div className="rounded-xl bg-muted p-4 text-sm">
-            <p className="font-semibold">DNS records to add</p>
-            <div className="mt-2 grid grid-cols-[80px_1fr] gap-1 font-mono text-xs"><span>CNAME</span><span>{o.domain} → edge.talksme.in</span><span>TXT</span><span>_talksme.{o.domain} = verify-{o.id.slice(0, 8)}</span></div>
-            <Button className="mt-3" size="sm" variant="outline" disabled={verify.isPending || o.domain_status === "verified"} onClick={() => verify.mutate()} data-testid="domain-verify-button">{o.domain_status === "verified" ? "Verified · TLS active" : "Check DNS & issue TLS"}</Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ---------------- settings ----------------
 export function AdminSettings() {
   const qc = useQueryClient();
@@ -408,8 +457,8 @@ export function AdminSettings() {
             <div className="space-y-1"><Label>Accent color</Label><div className="flex gap-2"><input type="color" value={v.accent_color} onChange={(e) => setF({ ...f, accent_color: e.target.value.toUpperCase() })} className="h-9 w-12 rounded border" data-testid="org-accent-color-input" /><Input value={v.accent_color} onChange={(e) => setF({ ...f, accent_color: e.target.value })} /></div></div>
           </div>
           <div className="space-y-1"><Label>Font</Label><Select value={v.font} onValueChange={(x: string) => setF({ ...f, font: x })}><SelectTrigger className="w-full" data-testid="org-font-select"><SelectValue /></SelectTrigger><SelectContent>{LP_FONTS.map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-1"><Label>Logo URL</Label><Input value={v.logo_url} onChange={(e) => setF({ ...f, logo_url: e.target.value })} data-testid="org-logo-input" /></div>
-          <div className="space-y-1"><Label>Default banner URL</Label><Input value={v.banner_url} onChange={(e) => setF({ ...f, banner_url: e.target.value })} data-testid="org-banner-input" /></div>
+          <div className="space-y-1"><Label>Logo URL</Label><ImageInput value={v.logo_url} onChange={(x) => setF({ ...f, logo_url: x })} testid="org-logo" /></div>
+          <div className="space-y-1"><Label>Default banner URL</Label><ImageInput value={v.banner_url} onChange={(x) => setF({ ...f, banner_url: x })} testid="org-banner" /></div>
           <div className="space-y-1"><Label>Chat media retention (days)</Label><Input type="number" min={7} value={v.retention_days} onChange={(e) => setF({ ...f, retention_days: Number(e.target.value) })} data-testid="org-retention-input" /></div>
           <Button disabled={!Object.keys(f).length || m.isPending} onClick={() => m.mutate()} data-testid="org-settings-save">Save branding</Button>
         </div>
@@ -418,6 +467,7 @@ export function AdminSettings() {
             <div className="h-24 bg-cover bg-center" style={{ backgroundImage: `linear-gradient(135deg, ${v.primary_color}cc, ${v.accent_color}cc), url(${v.banner_url})` }} />
             <div className="flex items-center gap-3 p-4">{v.logo_url ? <img src={v.logo_url} alt="" className="h-12 w-12 rounded-xl object-contain" /> : <div className="h-12 w-12 rounded-xl" style={{ background: v.primary_color }} />}<div><p className="font-semibold">{v.name}</p><button className="mt-1 rounded-lg px-3 py-1 text-xs font-semibold text-white" style={{ background: v.primary_color }}>Chat Now</button></div></div>
           </div>
+          <ChangePassword />
           <div className="rounded-2xl border bg-card p-4">
             <p className="mb-2 font-heading font-semibold">Organization audit log</p>
             <div className="max-h-72 space-y-2 overflow-y-auto text-xs" data-testid="org-audit-log">
@@ -438,9 +488,10 @@ export function AdminBilling() {
   const [seats, setSeats] = useState<number | null>(null);
   const [pending, setPending] = useState<Invoice | null>(null);
   const change = useMutation({ mutationFn: (plan_id: string) => apiPost<Invoice>("/admin/billing/change", { plan_id, cycle, seats: seats ?? b.data?.org.seats }), onSuccess: (i) => { setPending(i); qc.invalidateQueries({ queryKey: ["billing"] }); }, onError: toastErr });
+  const [proof, setProof] = useState({ url: "", ref: "" });
   const hook = useMutation({
-    mutationFn: (x: { id: string; success: boolean }) => apiPost<Invoice>(`/admin/billing/invoices/${x.id}/simulate-webhook?success=${x.success}`),
-    onSuccess: (i) => { toast[i.status === "paid" ? "success" : "error"](i.status === "paid" ? "Webhook verified — subscription updated" : "Payment failed — subscription unchanged"); setPending(null); ["billing", "org"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); },
+    mutationFn: (id: string) => apiPost<Invoice>(`/admin/billing/invoices/${id}/proof`, { screenshot_url: proof.url, reference: proof.ref }),
+    onSuccess: () => { toast.success("Payment screenshot submitted — your plan activates once the platform approves it"); setPending(null); setProof({ url: "", ref: "" }); qc.invalidateQueries({ queryKey: ["billing"] }); },
     onError: toastErr,
   });
   const cancel = useMutation({ mutationFn: () => apiPost<{ message: string }>("/admin/billing/cancel"), onSuccess: (r) => toast(r.message), onError: toastErr });
@@ -450,11 +501,11 @@ export function AdminBilling() {
   const s = seats ?? org.seats;
   return (
     <div>
-      <PageHeader title="Subscription & billing" subtitle="Seat-based pricing. Status changes only after a verified payment-provider webhook." badge={<MockBadge label="Payment provider mocked" />} />
+      <PageHeader title="Subscription & billing" subtitle="Seat-based pricing in ₹. Pay via UPI QR, upload the screenshot, and your plan activates after approval." />
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard tone="brand" label="Current plan" value={plan.name} hint={`${org.billing_cycle} · ${org.status}`} testid="billing-current-plan" />
         <StatCard label="Seats" value={`${seats_used}/${org.seats}`} hint="active employees / purchased" testid="billing-seats" />
-        <StatCard label="Next invoice" value={money(org.billing_cycle === "monthly" ? plan.price_monthly : plan.price_yearly, "USD")} hint="example pricing" />
+        <StatCard label="Next invoice" value={money(org.billing_cycle === "monthly" ? plan.price_monthly : plan.price_yearly)} hint="example pricing" />
         <StatCard label="Failed payments" value={invoices.filter((i) => i.status === "failed").length} tone="danger" hint="7-day grace period applies" />
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -465,7 +516,7 @@ export function AdminBilling() {
         {plans.map((p) => (
           <div key={p.id} className={cn("lift flex flex-col rounded-2xl border bg-card p-5", p.id === org.plan_id && "border-primary ring-2 ring-primary/20")} data-testid="plan-card">
             <p className="font-heading text-lg font-bold">{p.name}</p>
-            <p className="mt-2 font-heading text-3xl font-extrabold">{money(cycle === "monthly" ? p.price_monthly : p.price_yearly, "USD")}<span className="text-sm font-normal text-muted-foreground">/{cycle === "monthly" ? "mo" : "yr"}</span></p>
+            <p className="mt-2 font-heading text-3xl font-extrabold">{money(cycle === "monthly" ? p.price_monthly : p.price_yearly)}<span className="text-sm font-normal text-muted-foreground">/{cycle === "monthly" ? "mo" : "yr"}</span></p>
             <p className="text-xs text-muted-foreground">{p.seats} seats included</p>
             <ul className="my-4 flex-1 space-y-1.5 text-sm">{p.features.map((x) => <li key={x} className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-success" />{x}</li>)}</ul>
             <Button variant={p.id === org.plan_id ? "outline" : "default"} onClick={() => change.mutate(p.id)} disabled={change.isPending} data-testid="plan-select-button">{p.id === org.plan_id ? "Update seats / cycle" : "Switch to " + p.name}</Button>
@@ -478,21 +529,23 @@ export function AdminBilling() {
           <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Plan</TableHead><TableHead>Seats</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
           <TableBody>
             {invoices.map((i) => (
-              <TableRow key={i.id} data-testid="invoice-row"><TableCell>{dateTime(i.date)}</TableCell><TableCell>{i.plan_name} · {i.cycle}</TableCell><TableCell>{i.seats}</TableCell><TableCell className="text-right">{money(i.amount, "USD")}</TableCell><TableCell><StatusBadge status={i.status} testid="invoice-status-badge" /></TableCell>
-                <TableCell>{i.status === "pending" && <Button size="xs" variant="outline" onClick={() => setPending(i)} data-testid="invoice-pay-button">Complete payment</Button>}</TableCell></TableRow>
+              <TableRow key={i.id} data-testid="invoice-row"><TableCell>{dateTime(i.date)}</TableCell><TableCell>{i.plan_name} · {i.cycle}</TableCell><TableCell>{i.seats}</TableCell><TableCell className="text-right">{money(i.amount)}</TableCell><TableCell><StatusBadge status={i.status} testid="invoice-status-badge" /></TableCell>
+                <TableCell>{(i.status === "pending" || i.status === "rejected") && <Button size="xs" variant="outline" onClick={() => setPending(i)} data-testid="invoice-pay-button">Pay now</Button>}{i.screenshot_url && <a href={i.screenshot_url} target="_blank" rel="noreferrer" className="ml-2 text-xs text-primary underline">Screenshot</a>}</TableCell></TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
       <Dialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
         <DialogContent data-testid="checkout-dialog">
-          <DialogHeader><DialogTitle>Mock checkout · {pending && money(pending.amount, "USD")}</DialogTitle>
-            <DialogDescription>{pending?.plan_name} · {pending?.cycle} · {pending?.seats} seats. In production this opens the payment provider; the subscription only changes when its signed webhook arrives.</DialogDescription></DialogHeader>
-          <MockBadge label="Simulated webhook" />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => pending && hook.mutate({ id: pending.id, success: false })} data-testid="checkout-fail-button">Simulate failed payment</Button>
-            <Button onClick={() => pending && hook.mutate({ id: pending.id, success: true })} data-testid="checkout-success-button">Simulate successful webhook</Button>
-          </DialogFooter>
+          <DialogHeader><DialogTitle>Pay {pending && money(pending.amount)} via UPI</DialogTitle>
+            <DialogDescription>{pending?.plan_name} · {pending?.cycle} · {pending?.seats} seats. Scan the QR, pay, then upload the payment screenshot.</DialogDescription></DialogHeader>
+          {b.data.payment_qr_url ? <img src={b.data.payment_qr_url} alt="Payment QR" className="mx-auto h-56 w-56 rounded-xl border object-contain" data-testid="payment-qr-image" /> : <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700" data-testid="payment-qr-missing">The platform hasn't uploaded a payment QR yet.</p>}
+          {b.data.upi_id && <p className="text-center text-sm">UPI ID: <b className="font-mono" data-testid="payment-upi-id">{b.data.upi_id}</b></p>}
+          <div className="space-y-2">
+            <Label>Payment screenshot</Label><ImageInput value={proof.url} onChange={(u) => setProof({ ...proof, url: u })} testid="payment-screenshot" />
+            <Input placeholder="UPI transaction ID (optional)" value={proof.ref} onChange={(e) => setProof({ ...proof, ref: e.target.value })} data-testid="payment-reference-input" />
+          </div>
+          <DialogFooter><Button disabled={!proof.url || hook.isPending} onClick={() => pending && hook.mutate(pending.id)} data-testid="payment-submit-button">Submit for approval</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

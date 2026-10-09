@@ -62,8 +62,10 @@ def test_message_idempotency():
 def test_existing_phone_requires_verification():
     r = httpx.post(api_url("/public/landing/talksme/support/start"),
                    json={"name": "Imposter", "country_code": "+91", "phone": "9800000001"})
-    assert r.status_code == 200
-    assert r.json()["status"] == "verification_required"
+    # 200 when BlackSMS delivers the WhatsApp OTP, 400 when the provider fails — never a session, never a code in the body
+    assert r.status_code in (200, 400)
+    if r.status_code == 200:
+        assert r.json()["status"] == "verification_required" and not r.json().get("mock_code")
     assert "omni_session" not in r.cookies
 
 
@@ -96,3 +98,33 @@ def test_support_access_requires_step_up(password, code):
     sa = login("superadmin@talksme.in")
     r = post("/superadmin/organizations/org-aurora/access", sa, {"reason": "Investigating ticket 1234", "password": password})
     assert r.status_code == code
+
+
+def test_admin_reset_and_delete_employee_keeps_data():
+    admin = login("admin@talksme.in")
+    emps = get("/employees", admin).json()
+    neha = next(e for e in emps if e["email"] == "neha@talksme.in")
+    assert post(f"/admin/employees/{neha['id']}/reset-password", admin, {"password": "NewPass@123"}).status_code == 200
+    assert httpx.post(api_url("/auth/login"), json={"email": "neha@talksme.in", "password": "NewPass@123"}).status_code == 200
+    convs_before = len(get(f"/admin/employees/{neha['id']}/details", admin).json()["conversations"])
+    assert httpx.delete(api_url(f"/admin/employees/{neha['id']}"), headers=admin).status_code == 200
+    assert all(e["id"] != neha["id"] for e in get("/employees", admin).json())
+    assert len([c for c in get("/conversations", admin).json() if c["employee_id"] == neha["id"]]) == convs_before
+
+
+def test_feature_gate_and_qr_payment_approval():
+    sa = login("superadmin@talksme.in")
+    httpx.patch(api_url("/superadmin/organizations/org-nimbus"), headers=sa, json={"features": {"broadcasts": False}, "reason": "test"})
+    nimbus = login("admin@nimbus.demo")
+    assert post("/admin/broadcasts", nimbus, {"title": "Hello", "message": "Promo text"}).status_code == 403
+    httpx.patch(api_url("/superadmin/organizations/org-nimbus"), headers=sa, json={"features": {"broadcasts": True}, "reason": "test"})
+    inv = post("/admin/billing/change", nimbus, {"plan_id": "plan-enterprise", "cycle": "monthly", "seats": 30}).json()
+    assert inv["status"] == "pending"
+    assert post(f"/admin/billing/invoices/{inv['id']}/proof", nimbus, {"screenshot_url": "https://res.cloudinary.com/x/proof.png"}).json()["status"] == "awaiting_approval"
+    assert post(f"/superadmin/invoices/{inv['id']}/decide", sa, {"approve": True}).json()["status"] == "paid"
+    assert get("/admin/billing", nimbus).json()["org"]["plan_id"] == "plan-enterprise"
+
+
+def test_admin_cannot_manage_domain_anymore():
+    admin = login("admin@talksme.in")
+    assert httpx.put(api_url("/admin/org/domain"), headers=admin, json={"domain": "x.example.com"}).status_code in (404, 405)

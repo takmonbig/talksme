@@ -10,7 +10,7 @@ DEMO_PASSWORD = "Demo@123"
 COLLECTIONS = [
     "users", "organizations", "customer_profiles", "conversations", "messages", "deposits", "deposit_events",
     "transfers", "landing_pages", "broadcasts", "plans", "invoices", "audit_logs", "calls", "otp_challenges",
-    "platform_settings",
+    "platform_settings", "quick_replies",
 ]
 LOGO = "https://customer-assets-m6fa6gv7.emergentagent.net/job_9a74ecc3-1406-41c7-b859-27f365d11bd4/artifacts/eff273b31f7ef718_Talksme.in_Gradient_Chat_Logo-removebg-preview.png"
 BANNERS = [
@@ -47,13 +47,13 @@ async def reset_demo() -> None:
     pw = hash_pw(DEMO_PASSWORD)
 
     plans = [
-        {"id": "plan-starter", "name": "Starter", "price_monthly": 49, "price_yearly": 490, "seats": 3,
+        {"id": "plan-starter", "name": "Starter", "price_monthly": 999, "price_yearly": 9990, "seats": 3,
          "features": ["1 organization", "1 custom domain", "Basic analytics"], "active": True},
-        {"id": "plan-growth", "name": "Growth", "price_monthly": 149, "price_yearly": 1490, "seats": 10,
+        {"id": "plan-growth", "name": "Growth", "price_monthly": 2999, "price_yearly": 29990, "seats": 10,
          "features": ["Advanced analytics", "CRM automation", "Broadcast management"], "active": True},
-        {"id": "plan-business", "name": "Business", "price_monthly": 349, "price_yearly": 3490, "seats": 25,
+        {"id": "plan-business", "name": "Business", "price_monthly": 6999, "price_yearly": 69990, "seats": 25,
          "features": ["Advanced permissions", "Enhanced reporting", "Priority support"], "active": True},
-        {"id": "plan-enterprise", "name": "Enterprise", "price_monthly": 999, "price_yearly": 9990, "seats": 100,
+        {"id": "plan-enterprise", "name": "Enterprise", "price_monthly": 19999, "price_yearly": 199990, "seats": 100,
          "features": ["Custom seats", "Custom usage limits", "Advanced support"], "active": True},
     ]
     await db.plans.insert_many([dict(p) for p in plans])
@@ -70,7 +70,7 @@ async def reset_demo() -> None:
          "accent_color": "#F59E0B", "logo_url": "", "banner_url": BANNERS[2]},
     ]
     for i, o in enumerate(orgs):
-        o.update({"billing_cycle": "monthly", "font": "Inter", "retention_days": 90,
+        o.update({"features": {k: True for k in ("broadcasts", "audio_calls", "landing_builder", "advanced_analytics", "deposits", "quick_replies")}, "billing_cycle": "monthly", "font": "Inter", "retention_days": 90,
                   "created_at": iso(t0 - timedelta(days=120 - i * 30)),
                   "trial_ends": iso(t0 + timedelta(days=10)) if o["status"] == "trial" else None})
     await db.organizations.insert_many([dict(o) for o in orgs])
@@ -246,11 +246,17 @@ async def reset_demo() -> None:
                                           "date": iso(t0 - timedelta(days=30 * m + 2))})
 
     await db.platform_settings.insert_one({
-        "id": "platform", "default_retention_days": 90, "maintenance_mode": False,
+        "id": "platform", "default_retention_days": 90, "maintenance_mode": False, "payment_qr_url": "", "upi_id": "talksme@upi",
         "feature_flags": {"audio_calls": True, "broadcasts": True, "meta_pixel": True, "voice_notes": True, "employee_2fa": False},
         "theme_presets": [{"name": "Talksme Ocean", "primary": "#0284C7", "accent": "#8B5CF6"},
                           {"name": "Emerald", "primary": "#059669", "accent": "#06B6D4"},
                           {"name": "Royal Violet", "primary": "#7C3AED", "accent": "#F59E0B"}]})
+    for o in orgs:
+        await db.quick_replies.insert_many([{"id": new_id(), "org_id": o["id"], "title": t, "text": x, "created_by": "Admin"} for t, x in [
+            ("Pricing", "Our plans start from ₹2,999. I can share a detailed price list — which product are you interested in?"),
+            ("EMI", "Yes! EMI is available on 3, 6 and 12 months with leading banks and UPI apps."),
+            ("Callback", "Sure — please share a convenient time and I'll call you back."),
+            ("Payment received", "Thank you! Your payment has been recorded and will be confirmed by our accounts team shortly.")]])
     await db.audit_logs.insert_one({"id": new_id(), "org_id": None, "actor_id": None, "actor_name": "system",
                                     "actor_role": "system", "action": "demo.reset", "resource": "platform",
                                     "reason": "Demo data seeded", "at": iso(t0)})
