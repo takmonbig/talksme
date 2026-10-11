@@ -14,6 +14,7 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
 from lib.seed_data import reset_demo
+from lib.realtime import hub
 from routers import admin, auth, automsg, chat, crm, notify, public, realtime, sa_explorer, superadmin
 
 
@@ -21,12 +22,18 @@ async def _boot() -> None:
     await ensure_indexes()
     if not await db.users.find_one({"role": "superadmin"}):
         await reset_demo()
+    # One-time: guests used to be created with push off by default, which silently blocked their notifications.
+    if not await db.migrations.find_one({"_id": "push-default-on"}):
+        await db.users.update_many({"role": "customer", "notify_push": False}, {"$set": {"notify_push": True}})
+        await db.migrations.insert_one({"_id": "push-default-on"})
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.boot_task = asyncio.create_task(_boot())
+    app.state.relay_task = asyncio.create_task(hub.relay_loop())  # cross-replica realtime fan-out
     yield
+    app.state.relay_task.cancel()
     client.close()
 
 

@@ -35,21 +35,20 @@ async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     hub.add(user["id"], ws)
     try:
-        for ev in hub.ringing_for(user["id"]):  # opened the app from a call notification -> still ring
+        for ev in await hub.ringing_for(user["id"]):  # opened the app from a call notification -> still ring
             await ws.send_json(ev)
         while True:
             msg = await ws.receive_json()
             if msg.get("type") == "visibility":
-                (hub.visible.add if msg.get("visible") else hub.visible.discard)(ws)
+                await hub.set_visible(user["id"], ws, bool(msg.get("visible")))
                 continue
             if user["role"] == "superadmin" and msg.get("type") in ("watch", "unwatch"):
                 cid = str(msg.get("conversation_id") or "")
                 if msg["type"] == "unwatch":
-                    hub.watchers[cid].discard(user["id"])
-                elif cid not in hub.watchers or user["id"] not in hub.watchers[cid]:
+                    await hub.unwatch(cid, user["id"])
+                else:
                     c = await db.conversations.find_one({"id": cid}, {"_id": 0, "org_id": 1, "customer_name": 1, "employee_name": 1})
-                    if c:
-                        hub.watchers[cid].add(user["id"])
+                    if c and await hub.watch(cid, user["id"]):
                         await audit(user, "sa.live_watch_started", f"conversation:{cid} {c.get('customer_name')} <> {c.get('employee_name') or 'queue'}", c["org_id"])
                 continue
             c = await db.conversations.find_one({"id": msg.get("conversation_id")}, {"_id": 0})
@@ -61,25 +60,28 @@ async def ws_endpoint(ws: WebSocket):
                 org = await db.organizations.find_one({"id": c["org_id"]}, {"_id": 0, "features": 1})
                 if (org or {}).get("features", {}).get("audio_calls") is False:
                     continue
+                action = msg.get("action")
                 peer = c.get("employee_id") if user["role"] == "customer" else c["customer_user_id"]
+                if user["role"] == "customer" and action == "offer":
+                    prof = await db.customer_profiles.find_one({"id": c["customer_id"]}, {"_id": 0, "calls_allowed": 1}) or {}
+                    if prof.get("calls_allowed") is False:
+                        await ws.send_json({"type": "call", "conversation_id": c["id"], "action": "not_allowed"})
+                        continue
                 if peer:
-                    action = msg.get("action")
                     ev = {"type": "call", "conversation_id": c["id"], "action": action, "payload": msg.get("payload"),
                           "from_name": user["name"], "from_avatar": user.get("avatar", "")}
                     if action == "offer":
-                        hub.pending_calls[c["id"]] = (peer, ev, time.time())
+                        await hub.ring(c["id"], peer, ev)
                         url = f"/chat/{c['id']}" if user["role"] != "customer" else f"/employee/inbox?c={c['id']}"
                         push_bg({peer}, {"title": f"📞 Incoming call · {user['name']}", "body": "Tap to answer the audio call",
                                          "url": url, "tag": f"call-{c['id']}", "call": True}, only_if_not_visible=False)
                     elif action in ("answer", "reject", "end", "busy"):
-                        hub.pending_calls.pop(c["id"], None)
-                    elif action == "ice" and c["id"] in hub.pending_calls:
-                        hub.pending_calls[c["id"]][1].setdefault("ice", []).append(msg.get("payload"))
+                        await hub.stop_ring(c["id"])
                     await hub.send({peer}, ev)
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:
-        hub.remove(user["id"], ws)
+        await hub.remove(user["id"], ws)
 
 
 # ---------- media ----------

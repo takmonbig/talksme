@@ -1,0 +1,108 @@
+{
+  "iteration": 2,
+  "summary": "All 7 acceptance criteria exercised across 13 artifacts (7 browser checks + 6 backend test files, totalling 13 backend test functions + 7 browser checks). Agora audio calling both directions (no-mic warning accepted per spec), no-login guest chat from landing (same conversation reopened, no duplicate), optional WhatsApp backup number (fresh save / 409 conflict for owned number / skip), employee per-customer calls_allowed toggle (customer blocked, employee unaffected, seed state restored), Meta Pixel full-code paste -> ID extraction + persisted + loads fbevents.js/window.fbq on the public page, persistent 400-day login cookie + already-signed-in banner, and push plumbing (key, 422 on non-https, 200 + notify_push=true on https) all passed.",
+  "passed": 13,
+  "failed": 0,
+  "bugs": [],
+  "action_items": [
+    {
+      "type": "note",
+      "severity": "low",
+      "detail": "Pre-existing backend test tests/test_core.py::test_admin_reset_and_delete_employee_keeps_data fails (StopIteration: neha@talksme.in not present in GET /api/employees for org-talksme, though test_credentials.md lists her as seeded). This test predates the current acceptance_matrix and is not one of the 7 reviewed criteria, so it was not modified; flagging for awareness only."
+    }
+  ],
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Agora voice call customer->employee works both sides",
+      "name": "agora-call-both-sides",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Employee logged in and stayed on /employee (no reload). Customer opened /chat/57242d0d-e60a-4eba-a3b9-ba836c762a57 directly and clicked chat-call-button (no mic granted, per spec_deviations). Employee's call-modal/call-accept-button appeared within 15s; after accept both call-status reached 'Connected' within 10s; employee's call-end-button closed call-modal on both sides."
+    },
+    {
+      "criterion": "No-login guest chat from landing page",
+      "name": "guest-chat-no-login-from-landing",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Fresh browser context, /p/talksme/support -> lp-chat-now-button click produced NO onboarding-dialog, navigated straight to /chat/<id>; backup-phone-card with backup-phone-input/share/skip visible. Revisiting /p/talksme/support and clicking Chat Now again landed on the SAME /chat/<id> URL (no duplicate conversation)."
+    },
+    {
+      "criterion": "Optional WhatsApp backup number",
+      "name": "backup-phone-share-saves-number",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Fresh guest + fresh 10-digit number -> 'saved for backup' toast, card replaced by system message containing the number and 'saved for backup'. Second fresh guest entering 9800000001 (owned) -> error toast mentioning 'Restore chats', card remained (not saved). Third fresh guest -> Skip hid the card."
+    },
+    {
+      "criterion": "Optional WhatsApp backup number (API)",
+      "name": "test_tscheck_backup_phone.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/me/backup-phone (guest session) with a fresh number -> 200, GET /api/auth/me reflects the saved phone. Same endpoint with 9800000001 (owned by seeded customer) -> 409 mentioning 'restore'. POST /api/me/backup-phone/skip -> 200. 3/3 passed."
+    },
+    {
+      "criterion": "Employee can disable calls per customer",
+      "name": "employee-toggle-customer-calls-allowed",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "/employee/inbox?c=57242d0d-... customer-calls-allowed-switch started checked. Turned OFF -> customer's chat-call-button became disabled while employee's own chat-call-button stayed enabled. Switch turned back ON at the end, restoring seed state."
+    },
+    {
+      "criterion": "Employee can disable calls per customer (API)",
+      "name": "test_tscheck_customer_calls_allowed.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "PATCH /api/customers/b106167d-... {calls_allowed:false} -> 200; GET /api/conversations/57242d0d-... as employee shows calls_enabled=true (employee always can call) + customer_calls_allowed=false; as customer shows calls_enabled=false. PATCH back to true restores seed state and is asserted. Customer role PATCH -> 401/403. 2/2 passed."
+    },
+    {
+      "criterion": "Meta Pixel real integration",
+      "name": "meta-pixel-builder-saves-id-and-loads-on-public-page",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Admin builder: pasting the full Meta Pixel base-code snippet (fbq('init','1234567890123456')) into builder-pixel-input left the input value exactly '1234567890123456'; save succeeded ('Landing page created'). Publishing and visiting the public page: request to https://connect.facebook.net/en_US/fbevents.js observed and window.fbq is a function; no consent banner/mock log present."
+    },
+    {
+      "criterion": "Meta Pixel real integration (API)",
+      "name": "test_tscheck_meta_pixel_landing_page.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/admin/landing-pages with pixel_id = full pasted Meta Pixel code -> 200, response and the subsequent list both show pixel_id == '1234567890123456'. Same endpoint with junk non-pixel text -> 422. 2/2 passed."
+    },
+    {
+      "criterion": "Persistent login",
+      "name": "already-signed-in-banner-on-login-page",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Logged in as agent@talksme.in, then navigated to /login: already-signed-in-banner visible with continue-signed-in-button; clicking it navigated to /employee (the role home)."
+    },
+    {
+      "criterion": "Persistent login (API)",
+      "name": "test_tscheck_persistent_login_cookie.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/auth/login Set-Cookie omni_session has Max-Age=34560000 (400 days). GET /api/auth/me with that cookie re-issues Set-Cookie with the same Max-Age=34560000. 2/2 passed."
+    },
+    {
+      "criterion": "Push/notification plumbing",
+      "name": "notification-enable-banner-shown-above-composer",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Customer chat view (390x780): enable-notifications-banner visible above chat-message-input showing the 'blocked' variant text, as expected per spec_deviations (headless Chromium reports denied). Composer remained usable below it."
+    },
+    {
+      "criterion": "Push/notification plumbing (API)",
+      "name": "test_tscheck_calls_push_endpoints.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/push/key -> 200 {public_key}. POST /api/push/subscribe with endpoint 'http://...' -> 422. GET /api/calls/ice-servers authed -> 200 {ice_servers:[...]}; unauthenticated -> 401. 4/4 passed (ice-servers call was flaky once due to an external Metered TURN API timeout, then passed on rerun)."
+    },
+    {
+      "criterion": "Push/notification plumbing (API, https success)",
+      "name": "test_tscheck_push_subscribe_success.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/push/subscribe with a valid https:// endpoint -> 200; GET /api/auth/me afterwards shows notify_push == true. 1/1 passed."
+    }
+  ]
+}

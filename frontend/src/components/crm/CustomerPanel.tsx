@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, CalendarClock, History, Plus, Shuffle, StickyNote, Unlock, Wallet } from "lucide-react";
+import { Ban, CalendarClock, History, Plus, Shuffle, StickyNote, Unlock, Wallet, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, Skeleton, StatusBadge } from "@/components/common";
@@ -158,10 +159,18 @@ export function CustomerPanel({ customerId, conversationId, employeeId, canTrans
       <div className="flex flex-col items-center text-center">
         <Avatar name={p.name} size={64} />
         <p className="mt-2 font-heading text-base font-semibold" data-testid="customer-panel-name">{p.name}</p>
-        <p className="text-xs text-muted-foreground" data-testid="customer-panel-phone">{p.phone} · <span className="italic">not WhatsApp-verified</span></p>
+        <p className="text-xs text-muted-foreground" data-testid="customer-panel-phone">{p.phone ? <>{p.phone} · <span className="italic">not WhatsApp-verified</span></> : <span className="italic">Guest · no WhatsApp number shared yet</span>}</p>
         <p className="mt-1 text-xs text-muted-foreground">Assigned: {p.assigned_employee_name || "Queue"}</p>
         {p.blocked && <span className="mt-2 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive" data-testid="customer-blocked-badge">Blocked</span>}
       </div>
+
+      <label className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 px-3 py-2.5" data-testid="customer-calls-allowed-row">
+        <span className="min-w-0">
+          <span className="flex items-center gap-1.5 text-sm font-medium"><Phone className="h-3.5 w-3.5 text-primary" /> Customer can call me</span>
+          <span className="block text-[11px] text-muted-foreground">{p.calls_allowed === false ? "Off: their call button is hidden. You can still call them." : "On: they can start voice calls with you."}</span>
+        </span>
+        <Switch checked={p.calls_allowed !== false} onCheckedChange={(v) => patch.mutate({ calls_allowed: v })} data-testid="customer-calls-allowed-switch" />
+      </label>
 
       <section className="space-y-2">
         <Label className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Lead stage</Label>

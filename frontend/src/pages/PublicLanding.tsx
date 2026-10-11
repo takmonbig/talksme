@@ -11,6 +11,7 @@ import { EmptyState, MockBadge, Skeleton } from "@/components/common";
 import { LandingRender } from "@/components/LandingRender";
 import { InstallBanner } from "@/components/AppBanners";
 import { appInstalled, isStandalone } from "@/lib/pwa";
+import { campaignParams, trackPixel } from "@/lib/pixel";
 import { apiGet, apiPost } from "@/lib/api";
 import { beginSession } from "@/lib/session";
 import { toastErr } from "@/lib/hooks";
@@ -28,21 +29,15 @@ export default function PublicLanding() {
   const [form, setForm] = useState({ country_code: "+91", phone: "", name: "" });
   const [challenge, setChallenge] = useState<StartChatOut | null>(null);
   const [code, setCode] = useState("");
-  const [consent, setConsent] = useState<boolean | null>(() => { const v = localStorage.getItem("pixel-consent"); return v === null ? null : v === "1"; });
-  const [pixelLog, setPixelLog] = useState<string[]>([]);
   const [inApp, setInApp] = useState<string | null>(null);
-  const fired = useRef(new Set<string>());
-  const utm = params.get("utm_source") || params.get("utm_campaign") || "";
+  const [restore, setRestore] = useState(false);
+  const campaign = campaignParams(params);
+  const pixel = q.data?.page.pixel_id ?? "";
 
-  // MOCKED Meta Pixel: events fire once, only with consent, and never include phone numbers or chat content.
-  const fire = (ev: string) => {
-    if (!q.data?.page.pixel_id || !consent || fired.current.has(ev)) return;
-    fired.current.add(ev);
-    const line = `${ev} → pixel ${q.data.page.pixel_id}${utm ? ` · utm=${utm}` : ""}`;
-    console.info("[Meta Pixel MOCKED]", line);
-    setPixelLog((l) => [...l, line]);
-  };
-  useEffect(() => { if (q.data) fire("PageView"); }, [q.data, consent]); // eslint-disable-line
+  // Real Meta Pixel (admin-configured): PageView on load, Lead + Contact when the chat starts.
+  // Event params carry only page + campaign info, never phone numbers or chat content.
+  useEffect(() => { if (pixel) trackPixel(pixel, "PageView"); }, [pixel]);
+  const fire = (ev: "Lead" | "Contact") => { if (pixel) trackPixel(pixel, ev, { content_name: q.data?.page.title ?? "", ...campaign }); };
 
   const finish = (r: StartChatOut) => {
     if (r.status === "verification_required") { setChallenge(r); return; }
@@ -52,8 +47,10 @@ export default function PublicLanding() {
     // App installed but we're in the browser: offer to continue in the app; otherwise go straight into the chat.
     appInstalled().then((yes) => { if (yes && !isStandalone()) { setOpen(false); setInApp(url); } else nav(url); });
   };
+  // Chat Now = instant chat as a Guest (no login). The restore dialog sends a phone number to recover old chats.
   const start = useMutation({
-    mutationFn: () => apiPost<StartChatOut>(`/public/landing/${org}/${slug}/start`, { ...form, phone: form.phone.replace(/\D/g, ""), ...choice }),
+    mutationFn: (c: { employee_id?: string; image_id?: string; withPhone?: boolean }) => apiPost<StartChatOut>(`/public/landing/${org}/${slug}/start`,
+      { employee_id: c.employee_id, image_id: c.image_id, ...(c.withPhone ? { country_code: form.country_code, phone: form.phone.replace(/\D/g, ""), name: form.name.trim() || undefined } : {}) }),
     onSuccess: finish, onError: toastErr,
   });
   const verify = useMutation({
@@ -65,29 +62,18 @@ export default function PublicLanding() {
   if (q.isError || !q.data) return <div className="mx-auto max-w-lg p-10"><EmptyState title="Page not available" text="This landing page doesn't exist or isn't published yet." /></div>;
   const { page, org: o, employees } = q.data;
   const phoneOk = /^\d{6,14}$/.test(form.phone.replace(/\D/g, ""));
-  const nameOk = form.name.trim().length >= 2;
 
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="sticky top-0 z-30 bg-slate-50/90 backdrop-blur"><div className="mx-auto max-w-5xl"><InstallBanner /></div></div>
       <div className="mx-auto max-w-5xl">
-        <LandingRender page={page} orgName={o.name} employees={employees} onChat={(employee_id, image_id) => { setChoice({ employee_id, image_id }); setChallenge(null); setOpen(true); }} />
+        <LandingRender page={page} orgName={o.name} employees={employees} onChat={(employee_id, image_id) => { if (start.isPending) return; setChoice({ employee_id, image_id }); start.mutate({ employee_id, image_id }); }} />
+        <div className="pb-2 text-center">
+          <button className="text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline" onClick={() => { setChallenge(null); setRestore(true); setOpen(true); }} data-testid="restore-chats-link">Chatted with us before? Restore your chats with WhatsApp</button>
+        </div>
+        {start.isPending && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" data-testid="chat-starting-overlay"><div className="rounded-2xl bg-white px-6 py-4 text-sm font-semibold text-slate-800 shadow-xl">Opening your chat…</div></div>}
         <p className="pb-6 text-center text-[11px] text-slate-400">Powered by talksme.in OmniChat · {o.domain ? `${o.domain}/${page.slug}` : `/p/${o.slug}/${page.slug}`}</p>
       </div>
-      {page.pixel_id && consent === null && (
-        <div className="fixed inset-x-3 bottom-3 z-40 mx-auto flex max-w-xl flex-col gap-2 rounded-2xl border bg-white p-4 text-sm text-slate-700 shadow-xl sm:flex-row sm:items-center" data-testid="pixel-consent-banner">
-          <span className="flex-1">We use a marketing pixel to measure visits. No chat content or phone numbers are shared.</span>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => { localStorage.setItem("pixel-consent", "0"); setConsent(false); }} data-testid="pixel-consent-decline">Decline</Button>
-            <Button size="sm" onClick={() => { localStorage.setItem("pixel-consent", "1"); setConsent(true); }} data-testid="pixel-consent-accept">Allow</Button>
-          </div>
-        </div>
-      )}
-      {pixelLog.length > 0 && (
-        <div className="fixed right-3 top-3 z-30 max-w-xs rounded-xl border bg-white/90 p-2 text-[11px] text-slate-600 shadow backdrop-blur" data-testid="pixel-event-log">
-          <MockBadge label="Meta Pixel mocked" />{pixelLog.map((l) => <p key={l}>{l}</p>)}
-        </div>
-      )}
       <Dialog open={!!inApp} onOpenChange={(o) => { if (!o && inApp) nav(inApp); }}>
         <DialogContent className="sm:max-w-sm" data-testid="open-in-app-dialog">
           <DialogHeader>
@@ -105,14 +91,10 @@ export default function PublicLanding() {
           {!challenge ? (
             <>
               <DialogHeader>
-                <DialogTitle>Start your chat with {o.name}</DialogTitle>
-                <DialogDescription>Enter your WhatsApp number and name to start chatting.</DialogDescription>
+                <DialogTitle>Restore your chats with {o.name}</DialogTitle>
+                <DialogDescription>Enter the WhatsApp number you shared before. We'll send a code on WhatsApp to verify it's you.</DialogDescription>
               </DialogHeader>
-              <div className="rounded-2xl border-2 border-emerald-500 bg-emerald-50 p-4 text-emerald-950" data-testid="onboarding-real-number-notice">
-                <p className="text-base font-extrabold leading-snug">📱 Please enter your REAL WhatsApp number</p>
-                <p className="mt-1 text-sm leading-snug">It's your <b>backup</b>. If you change phones, clear your browser or install the app, we send a code to this WhatsApp number to restore your full chat history. With a wrong number, your chats can't be recovered.</p>
-              </div>
-              <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (phoneOk && nameOk) start.mutate(); }}>
+              <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (phoneOk) start.mutate({ ...choice, withPhone: true }); }}>
                 <div className="space-y-1">
                   <Label>WhatsApp number</Label>
                   <div className="flex gap-2">
@@ -125,10 +107,10 @@ export default function PublicLanding() {
                   {form.phone && !phoneOk && <p className="text-xs text-destructive" data-testid="onboarding-phone-error">Enter 6–14 digits</p>}
                 </div>
                 <div className="space-y-1">
-                  <Label>Your name</Label>
+                  <Label>Your name <span className="font-normal text-muted-foreground">(optional)</span></Label>
                   <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Rahul" data-testid="onboarding-name-input" />
                 </div>
-                <DialogFooter><Button type="submit" className="w-full" disabled={!phoneOk || !nameOk || start.isPending} data-testid="onboarding-submit-button">{start.isPending ? "Connecting…" : "Continue to chat"}</Button></DialogFooter>
+                <DialogFooter><Button type="submit" className="w-full" disabled={!phoneOk || start.isPending} data-testid="onboarding-submit-button">{start.isPending ? "Checking…" : "Continue"}</Button></DialogFooter>
               </form>
             </>
           ) : (

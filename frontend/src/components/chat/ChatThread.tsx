@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Avatar, Skeleton } from "@/components/common";
 import { CallButton, startCall } from "@/components/chat/CallModal";
 import { InstallBanner, NotifyBanner } from "@/components/AppBanners";
+import { BackupPhoneCard } from "@/components/chat/BackupPhone";
 import { MAX_UPLOAD, uploadFile } from "@/lib/media";
 import { isTyping, wsSend } from "@/lib/realtime";
 import { apiGet, apiPost } from "@/lib/api";
@@ -158,6 +159,10 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
         {q.isError && <p className="text-center text-sm text-muted-foreground">Messages unavailable — reconnecting…</p>}
         <div className="mx-auto flex max-w-3xl flex-col gap-1.5">
           {msgs.map((m) => {
+            if (m.kind === "phone_request")
+              return viewer === "customer"
+                ? <BackupPhoneCard key={m.id} text={m.text} />
+                : <div key={m.id} className="my-2 self-center rounded-full bg-card/90 px-3 py-1 text-[11px] text-muted-foreground shadow-sm" data-testid="system-message">Asked the customer for a WhatsApp backup number (optional)</div>;
             if (m.sender_role === "system")
               return <div key={m.id} className="my-2 self-center rounded-full bg-card/90 px-3 py-1 text-[11px] text-muted-foreground shadow-sm" data-testid="system-message">{m.text}</div>;
             const own = m.sender_role === mine;

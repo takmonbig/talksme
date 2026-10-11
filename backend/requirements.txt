@@ -34,3 +34,4 @@ cloudinary==1.46.3
 reportlab==5.0.1
 pywebpush==2.5.0
 websockets==16.1.1
+agora-token-builder==1.0.0

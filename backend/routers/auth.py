@@ -41,7 +41,8 @@ async def logout(response: Response):
 
 
 @router.get("/auth/me", response_model=User)
-async def me(user: dict = Depends(current_user)):
+async def me(response: Response, user: dict = Depends(current_user)):
+    set_session(response, user)  # sliding session: stay signed in on this device (no repeated logins)
     return User(**user)
 
 

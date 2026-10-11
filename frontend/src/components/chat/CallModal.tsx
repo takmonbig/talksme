@@ -12,28 +12,33 @@ import { startRing, stopRing } from "@/lib/sound";
 
 type Phase = "idle" | "ringing" | "incoming" | "connecting" | "connected";
 interface Peer { cid: string; name: string; avatar?: string }
-const FALLBACK_ICE: RTCIceServer[] = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
-/** STUN + TURN relay (Metered) from the backend, so calls connect on mobile data / strict Wi-Fi too. */
-const iceConfig = async (): Promise<RTCConfiguration> => {
-  const r = await apiGet<{ ice_servers: RTCIceServer[]; turn: boolean }>("/calls/ice-servers").catch(() => null);
-  return { iceServers: r?.ice_servers?.length ? r.ice_servers : FALLBACK_ICE };
+interface AgoraJoin { app_id: string; channel: string; uid: number; token: string | null }
+type Agora = typeof import("agora-rtc-sdk-ng").default;
+type Client = import("agora-rtc-sdk-ng").IAgoraRTCClient;
+type MicTrack = import("agora-rtc-sdk-ng").IMicrophoneAudioTrack;
+
+let agora: Agora | null = null;
+const loadAgora = async () => {
+  if (!agora) {
+    agora = (await import("agora-rtc-sdk-ng")).default;
+    agora.setLogLevel(3); // warnings+errors only
+    agora.disableLogUpload();
+  }
+  return agora;
 };
 
 let startFn: ((p: Peer) => void) | null = null;
 export const startCall = (p: Peer) => startFn?.(p);
 
-/** Real WebRTC audio calls, signaled over the authenticated WebSocket. Mounted once per app. */
+/** Voice calls: ring/accept/reject/end are signalled over our authenticated WebSocket; the audio itself runs on Agora RTC. */
 export function CallManager() {
   const qc = useQueryClient();
   const [phase, setPhase] = useState<Phase>("idle");
   const [peer, setPeer] = useState<Peer | null>(null);
   const [secs, setSecs] = useState(0);
   const [muted, setMuted] = useState(false);
-  const pc = useRef<RTCPeerConnection | null>(null);
-  const local = useRef<MediaStream | null>(null);
-  const audio = useRef<HTMLAudioElement>(null);
-  const offer = useRef<RTCSessionDescriptionInit | null>(null);
-  const pendingIce = useRef<RTCIceCandidateInit[]>([]);
+  const client = useRef<Client | null>(null);
+  const mic = useRef<MicTrack | null>(null);
   const caller = useRef(false);
   const st = useRef({ phase, peer, secs });
   st.current = { phase, peer, secs };
@@ -44,39 +49,50 @@ export function CallManager() {
     apiPost(`/conversations/${p.cid}/calls`, { status, duration }).then(() => qc.invalidateQueries({ queryKey: ["messages", p.cid] })).catch(() => undefined);
   };
   const cleanup = () => {
-    pc.current?.close(); pc.current = null;
-    local.current?.getTracks().forEach((t) => t.stop()); local.current = null;
-    offer.current = null; pendingIce.current = []; setPhase("idle"); setPeer(null); setSecs(0); setMuted(false);
+    const c = client.current, m = mic.current;
+    client.current = null; mic.current = null;
+    m?.stop(); m?.close();
+    c?.removeAllListeners(); c?.leave().catch(() => undefined);
+    setPhase("idle"); setPeer(null); setSecs(0); setMuted(false);
   };
   const signal = (action: string, payload?: unknown) => st.current.peer && wsSend({ type: "call", conversation_id: st.current.peer.cid, action, payload });
 
-  const makePc = async () => {
+  /** Join the conversation's Agora channel and publish the microphone. */
+  const joinAudio = async (cid: string) => {
+    const [AgoraRTC, cfg] = await Promise.all([loadAgora(), apiGet<AgoraJoin>(`/calls/${cid}/agora`)]);
+    let track: MicTrack | null = null;
     try {
-      local.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+      track = await AgoraRTC.createMicrophoneAudioTrack({ AEC: true, ANS: true, AGC: true });
     } catch (err) {
-      if ((err as Error).name === "NotAllowedError") {
-        toast.error("Microphone access is blocked. Allow the microphone in your browser settings to call.");
-        throw new Error("mic");
-      }
-      toast.warning("No microphone found — you can listen, but the other person won't hear you.");
-      local.current = null;
+      const msg = String((err as { code?: string; message?: string }).code ?? (err as Error).message);
+      if (/PERMISSION|NotAllowed/i.test(msg)) { toast.error("Microphone access is blocked. Allow the microphone for this site to call."); throw err; }
+      toast.warning("No microphone found. You can listen, but the other person won't hear you.");
     }
-    const conn = new RTCPeerConnection(await iceConfig());
-    if (local.current) local.current.getTracks().forEach((t) => conn.addTrack(t, local.current!));
-    else conn.addTransceiver("audio", { direction: "recvonly" });
-    conn.onicecandidate = (e) => e.candidate && signal("ice", e.candidate.toJSON());
-    conn.ontrack = (e) => { if (audio.current) audio.current.srcObject = e.streams[0]; };
-    let drop: ReturnType<typeof setTimeout> | undefined;
-    conn.onconnectionstatechange = () => {
-      if (pc.current !== conn) return;
-      clearTimeout(drop);
-      if (conn.connectionState === "connected") setPhase("connected");
-      const lost = () => { if (pc.current !== conn) return; toast.error("Call connection lost"); signal("end"); log("failed", st.current.secs); cleanup(); };
-      if (conn.connectionState === "failed") lost();
-      if (conn.connectionState === "disconnected") drop = setTimeout(lost, 6000); // brief network blips recover on their own
-    };
-    pc.current = conn;
-    return conn;
+    const c = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+    client.current = c; mic.current = track;
+    c.on("user-published", async (u, type) => {
+      if (type !== "audio" || client.current !== c) return;
+      await c.subscribe(u, "audio");
+      u.audioTrack?.play();
+      setPhase("connected");
+    });
+    c.on("user-joined", () => { if (client.current === c) setPhase("connected"); }); // both sides are in the call
+    c.on("user-left", () => {
+      if (client.current !== c) return;
+      toast("Call ended"); log("completed", st.current.secs); cleanup();
+    });
+    c.on("connection-state-change", (cur, _prev, reason) => {
+      if (client.current === c && cur === "DISCONNECTED" && reason !== "LEAVE") { toast.error("Call connection lost"); signal("end"); log("failed", st.current.secs); cleanup(); }
+    });
+    try {
+      await c.join(cfg.app_id, cfg.channel, cfg.token, cfg.uid);
+    } catch (err) {
+      const code = String((err as { code?: string }).code ?? "");
+      toast.error(/GATEWAY|TOKEN|KEY|APP_ID/i.test(code) ? "The voice call service rejected the connection (Agora setup). Please contact support." : "Couldn't connect the call. Check your internet and try again.");
+      throw err;
+    }
+    if (client.current !== c) { c.leave().catch(() => undefined); return; }
+    if (track) await c.publish(track);
   };
 
   useEffect(() => {
@@ -84,30 +100,23 @@ export function CallManager() {
       if (st.current.phase !== "idle") return;
       caller.current = true; setPeer(p); st.current.peer = p; setPhase("ringing");
       try {
-        const conn = await makePc();
-        const o = await conn.createOffer();
-        await conn.setLocalDescription(o);
-        signal("offer", o);
+        await joinAudio(p.cid); // caller waits in the channel so audio starts the moment the other side accepts
+        if ((st.current.phase as Phase) === "ringing") signal("offer");
       } catch { cleanup(); }
     };
     const off = onRealtime(async (e) => {
       if (e.type !== "call") return;
       const cur = st.current;
+      if (e.action === "not_allowed") { toast.error("Calling isn't enabled for this chat. Please send a message instead."); cleanup(); return; }
       if (e.action === "offer") {
-        if (cur.phase !== "idle") { wsSend({ type: "call", conversation_id: e.conversation_id, action: "busy" }); return; }
-        caller.current = false; offer.current = e.payload as RTCSessionDescriptionInit;
-        pendingIce.current = (e.ice as RTCIceCandidateInit[] | undefined) ?? [];
+        if (cur.phase !== "idle") { if (cur.peer?.cid !== e.conversation_id) wsSend({ type: "call", conversation_id: e.conversation_id, action: "busy" }); return; }
+        caller.current = false;
         setPeer({ cid: e.conversation_id, name: e.from_name ?? "Caller", avatar: e.from_avatar }); setPhase("incoming");
         return;
       }
       if (!cur.peer || cur.peer.cid !== e.conversation_id) return;
-      if (e.action === "answer" && pc.current) {
-        await pc.current.setRemoteDescription(e.payload as RTCSessionDescriptionInit);
-        for (const c of pendingIce.current) await pc.current.addIceCandidate(c);
-        pendingIce.current = []; setPhase("connecting");
-      } else if (e.action === "ice") {
-        const c = e.payload as RTCIceCandidateInit;
-        if (pc.current?.remoteDescription) await pc.current.addIceCandidate(c).catch(() => undefined); else pendingIce.current.push(c);
+      if (e.action === "answer") {
+        if (cur.phase === "ringing") setPhase("connecting");
       } else if (e.action === "reject" || e.action === "busy") {
         toast(e.action === "busy" ? `${cur.peer.name} is on another call` : `${cur.peer.name} declined the call`); log(e.action === "busy" ? "busy" : "rejected"); cleanup();
       } else if (e.action === "end") {
@@ -132,7 +141,7 @@ export function CallManager() {
     if (phase === "connecting") {
       const t = setTimeout(() => {
         if (st.current.phase !== "connecting") return;
-        toast.error("Couldn't connect the audio. The network may be blocking calls, so please try again on Wi-Fi or mobile data.");
+        toast.error("Couldn't connect the audio. Please check your internet and try again.");
         signal("end"); log("failed"); cleanup();
       }, 25000);
       return () => clearTimeout(t);
@@ -144,18 +153,15 @@ export function CallManager() {
     }
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { local.current?.getAudioTracks().forEach((t) => (t.enabled = !muted)); }, [muted]);
+  useEffect(() => { mic.current?.setEnabled(!muted).catch(() => undefined); }, [muted]);
 
   const accept = async () => {
+    const p = st.current.peer;
+    if (!p) return;
     try {
       setPhase("connecting");
-      const conn = await makePc();
-      await conn.setRemoteDescription(offer.current!);
-      for (const c of pendingIce.current) await conn.addIceCandidate(c);
-      pendingIce.current = [];
-      const a = await conn.createAnswer();
-      await conn.setLocalDescription(a);
-      signal("answer", a);
+      await joinAudio(p.cid);
+      signal("answer");
     } catch { signal("reject"); cleanup(); }
   };
   const hangup = () => { signal(phase === "incoming" ? "reject" : "end"); log(phase === "connected" ? "completed" : phase === "connecting" ? "failed" : "missed", secs); cleanup(); };
@@ -163,12 +169,11 @@ export function CallManager() {
 
   return (
     <>
-      <audio ref={audio} autoPlay />
       <Dialog open={phase !== "idle"} onOpenChange={(o) => !o && hangup()}>
         <DialogContent showCloseButton={false} className="overflow-hidden border-0 p-0 sm:max-w-sm" data-testid="call-modal">
           <div className="bg-[#0B1220] p-8 text-center text-white">
             <DialogTitle className="sr-only">Audio call</DialogTitle>
-            <p className="inline-flex items-center gap-1 text-[11px] text-slate-400"><Lock className="h-3 w-3" /> Encrypted peer-to-peer audio</p>
+            <p className="inline-flex items-center gap-1 text-[11px] text-slate-400"><Lock className="h-3 w-3" /> Secure HD voice call</p>
             <div className="relative mx-auto mt-6 h-24 w-24">
               {phase !== "connected" && <span className="animate-pulse-ring absolute inset-0 rounded-full bg-sky-400/40" />}
               <div className="relative"><Avatar name={peer?.name ?? "?"} src={peer?.avatar} size={96} /></div>

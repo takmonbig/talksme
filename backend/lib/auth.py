@@ -25,9 +25,9 @@ def verify_pw(p: str, h: str | None) -> bool:
 
 def set_session(resp: Response, user: dict) -> None:
     token = jwt.encode(
-        {"sub": user["id"], "role": user["role"], "exp": now() + timedelta(hours=12)}, SECRET, algorithm="HS256"
+        {"sub": user["id"], "role": user["role"], "exp": now() + timedelta(days=400)}, SECRET, algorithm="HS256"
     )
-    resp.set_cookie(COOKIE, token, httponly=True, secure=True, samesite="lax", max_age=12 * 3600, path="/")
+    resp.set_cookie(COOKIE, token, httponly=True, secure=True, samesite="lax", max_age=400 * 24 * 3600, path="/")
 
 
 def clear_session(resp: Response) -> None:

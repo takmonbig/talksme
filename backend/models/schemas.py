@@ -1,7 +1,8 @@
 """Pydantic v2 models. Every model here has a hand-written TS twin in frontend/src/lib/types.ts."""
+import re
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class Base(BaseModel):
@@ -17,7 +18,8 @@ class User(Base):
     org_id: Optional[str] = None
     avatar: str = ""
     title: str = ""
-    phone: str = ""
+    phone: Optional[str] = ""
+    backup_skipped: bool = False
     status: str = "offline"
     verified: bool = False
     active: bool = True
@@ -98,7 +100,8 @@ class CustomerProfile(Base):
     org_id: str
     user_id: str
     name: str
-    phone: str
+    phone: str = ""
+    calls_allowed: bool = True
     labels: list[str] = []
     stage: str = "New Lead"
     assigned_employee_id: Optional[str] = None
@@ -114,6 +117,7 @@ class CustomerProfile(Base):
 
 
 class CustomerUpdate(BaseModel):
+    calls_allowed: Optional[bool] = None
     labels: Optional[list[str]] = None
     stage: Optional[str] = None
     blocked: Optional[bool] = None
@@ -166,6 +170,7 @@ class Conversation(Base):
     follow_up: bool = False
     blocked: bool = False
     calls_enabled: bool = True
+    customer_calls_allowed: bool = True
     typing: bool = False
     created_at: str
 
@@ -181,6 +186,7 @@ class Message(Base):
     reply_to: Optional[str] = None
     reply_preview: str = ""
     status: str = "sent"
+    kind: str = "text"  # "phone_request" = the "share your WhatsApp number for backup" card
     created_at: str
 
 
@@ -355,6 +361,20 @@ class LandingPageIn(BaseModel):
     published: bool = False
     available_24_7: bool = False
 
+    @field_validator("pixel_id", mode="before")
+    @classmethod
+    def _extract_pixel_id(cls, v: object) -> object:
+        """Admins may paste the whole Meta Pixel base code: pull the numeric Pixel ID out of it."""
+        if not isinstance(v, str):
+            return v
+        v = v.strip()
+        if not v or v.isdigit():
+            return v
+        m = re.search(r"fbq\(\s*['\"]init['\"]\s*,\s*['\"](\d{6,20})", v) or re.search(r"[?&]id=(\d{6,20})", v) or re.search(r"\b(\d{15,16})\b", v)
+        if not m:
+            raise ValueError("Couldn't find a Meta Pixel ID. Paste the Pixel ID (15-16 digits) or the full Meta Pixel code.")
+        return m.group(1)
+
 
 class PublicEmployee(Base):
     id: str
@@ -372,9 +392,10 @@ class PublicLanding(Base):
 
 
 class StartChatIn(BaseModel):
-    name: str = Field(min_length=2, max_length=60)
-    country_code: str = Field(pattern=r"^\+\d{1,4}$")
-    phone: str = Field(pattern=r"^\d{6,14}$")
+    """No login needed: name/phone are optional. Without a phone the customer chats as a Guest."""
+    name: Optional[str] = Field(None, min_length=2, max_length=60)
+    country_code: Optional[str] = Field(None, pattern=r"^\+\d{1,4}$")
+    phone: Optional[str] = Field(None, pattern=r"^\d{6,14}$")
     employee_id: Optional[str] = None
     image_id: Optional[str] = None
 
@@ -685,3 +706,15 @@ class AutoMessages(Base):
     welcome: list[AutoMsg] = Field(default_factory=list, max_length=5)
     return_enabled: bool = False
     return_text: str = Field(default="", max_length=1000)
+
+
+class BackupPhoneIn(BaseModel):
+    country_code: str = Field(pattern=r"^\+\d{1,4}$")
+    phone: str = Field(pattern=r"^\d{6,14}$")
+
+
+class AgoraJoinOut(Base):
+    app_id: str
+    channel: str
+    uid: int
+    token: Optional[str] = None

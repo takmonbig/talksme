@@ -43,21 +43,23 @@ async def public_landing(org_slug: str, slug: str):
 @router.post("/public/landing/{org_slug}/{slug}/start", response_model=StartChatOut)
 async def start_chat(org_slug: str, slug: str, body: StartChatIn, response: Response, viewer: dict | None = Depends(optional_user)):
     lp, _ = await _published(slug, org_slug)
-    phone = f"{body.country_code}{body.phone}"
+    phone = f"{body.country_code or '+91'}{body.phone}" if body.phone else None
     preferred = body.employee_id
     if body.image_id:
         img = next((i for i in lp.get("images", []) if i["id"] == body.image_id), None)
         preferred = img.get("employee_id") if img else preferred
     # An already-authenticated customer with this phone is an authorized session.
-    if viewer and viewer["role"] == "customer" and viewer.get("phone") == phone:
+    # Returning visitor on this device (session cookie): straight back into chat, no login of any kind.
+    if viewer and viewer["role"] == "customer" and (not phone or viewer.get("phone") == phone):
         return StartChatOut(status="ok", conversation_id=await open_conversation(viewer, lp, preferred))
-    existing = await db.users.find_one({"phone": phone, "role": "customer"}, {"_id": 0})
+    existing = await db.users.find_one({"phone": phone, "role": "customer"}, {"_id": 0}) if phone else None
     if existing:
         # Real WhatsApp OTP (BlackSMS) before any existing history is disclosed.
         return StartChatOut(status="verification_required", challenge_id=await create_challenge(existing, lp["id"], preferred))
-    user = {"id": new_id(), "email": None, "name": body.name, "role": "customer", "org_id": None, "password_hash": None,
-            "avatar": "", "title": "", "phone": phone, "status": "online", "verified": False, "active": True,
-            "calls_enabled": True, "guest": True, "target": 0, "notify_sound": True, "notify_push": False, "created_at": now_iso()}
+    name = body.name or f"Guest {secrets.randbelow(9000) + 1000}"
+    user = {"id": new_id(), "email": None, "name": name, "role": "customer", "org_id": None, "password_hash": None,
+            "avatar": "", "title": "", "phone": phone or "", "status": "online", "verified": False, "active": True,
+            "calls_enabled": True, "guest": True, "target": 0, "notify_sound": True, "notify_push": True, "created_at": now_iso()}
     await db.users.insert_one(dict(user))
     set_session(response, user)
     return StartChatOut(status="ok", conversation_id=await open_conversation(user, lp, preferred))

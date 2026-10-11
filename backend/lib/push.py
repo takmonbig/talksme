@@ -26,16 +26,22 @@ def _send(sub: dict, data: dict) -> int:
 
 async def push_to(uids: set[str], data: dict, only_if_not_visible: bool = True) -> None:
     """Push to every subscribed device of these users. Skips users who currently have the app open and visible."""
-    targets = {u for u in uids if not (only_if_not_visible and hub.visible_now(u))}
+    targets = {u for u in uids if not (only_if_not_visible and await hub.visible_now(u))}
     if not targets:
         return
     users = {u["id"] async for u in db.users.find({"id": {"$in": list(targets)}, "notify_push": {"$ne": False}}, {"_id": 0, "id": 1})}
     subs = await db.push_subscriptions.find({"user_id": {"$in": list(users)}}, {"_id": 0}).to_list(200)
     for sub in subs:
         code = await asyncio.to_thread(_send, sub, data)
+        log.info("push %s -> %s", data.get("tag"), code)
         if code in (404, 410):
             await db.push_subscriptions.delete_one({"endpoint": sub["endpoint"]})
 
 
+_tasks: set[asyncio.Task] = set()
+
+
 def push_bg(uids: set[str], data: dict, only_if_not_visible: bool = True) -> None:
-    asyncio.get_running_loop().create_task(push_to(uids, data, only_if_not_visible))
+    t = asyncio.get_running_loop().create_task(push_to(uids, data, only_if_not_visible))
+    _tasks.add(t)  # keep a reference so the task isn't garbage-collected mid-send
+    t.add_done_callback(_tasks.discard)

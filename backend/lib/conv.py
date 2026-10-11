@@ -57,7 +57,9 @@ async def shape(user: dict, convs: list[dict]) -> list[dict]:
             "muted": user["id"] in c.get("muted_by", []),
             "vip": "VIP" in prof.get("labels", []),
             "blocked": bool(prof.get("blocked")) or bool(c.get("blocked_by_customer")),
-            "calls_enabled": lps.get(c.get("landing_page_id") or "", {}).get("calls_enabled", True) and emp.get("calls_enabled", True),
+            "calls_enabled": lps.get(c.get("landing_page_id") or "", {}).get("calls_enabled", True) and emp.get("calls_enabled", True)
+            and (not is_cust or prof.get("calls_allowed", True)),
+            "customer_calls_allowed": prof.get("calls_allowed", True),
             "typing": (c.get("typing") or {}).get(other, "") > cutoff,
         })
     return out
@@ -96,7 +98,7 @@ async def open_conversation(user: dict, lp: dict, preferred: Optional[str]) -> s
     t = now_iso()
     prof = await db.customer_profiles.find_one({"org_id": org_id, "user_id": user["id"]}, {"_id": 0})
     if not prof:
-        prof = {"id": new_id(), "org_id": org_id, "user_id": user["id"], "name": user["name"], "phone": user["phone"],
+        prof = {"id": new_id(), "org_id": org_id, "user_id": user["id"], "name": user["name"], "phone": user.get("phone") or "", "calls_allowed": True,
                 "labels": ["New Lead"], "stage": "New Lead", "assigned_employee_id": None, "assigned_employee_name": "",
                 "blocked": False, "opted_in": False, "notes": [], "follow_ups": [], "created_at": t, "last_active": t}
         await db.customer_profiles.update_one({"org_id": org_id, "user_id": user["id"]}, {"$setOnInsert": prof}, upsert=True)
@@ -127,6 +129,12 @@ async def open_conversation(user: dict, lp: dict, preferred: Optional[str]) -> s
                                       "attachment": None, "reply_to": None, "reply_preview": "", "status": "read",
                                       "created_at": t, "idempotency_key": new_id(), "hidden_for": []})
         await send_auto_messages(conv, "welcome")
+        if not user.get("phone") and not user.get("backup_skipped"):
+            await db.messages.insert_one({"id": new_id(), "conversation_id": conv["id"], "org_id": org_id, "sender_role": "system",
+                                          "sender_id": None, "sender_name": "talksme.in", "kind": "phone_request",
+                                          "text": "📱 Share your WhatsApp number for backup? It lets you restore this chat on a new phone or in the app. Totally optional.",
+                                          "attachment": None, "reply_to": None, "reply_preview": "", "status": "read",
+                                          "created_at": iso(now() + timedelta(milliseconds=400)), "idempotency_key": new_id(), "hidden_for": []})
     doc = await db.conversations.find_one({"customer_id": prof["id"], "landing_page_id": lp["id"]}, {"_id": 0, "id": 1})
     return doc["id"]
 

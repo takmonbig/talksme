@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Logo, MockBadge, ThemeToggle } from "@/components/common";
 import { apiPost } from "@/lib/api";
 import type { StartChatOut } from "@/lib/types";
-import { HOME_BY_ROLE, errMsg } from "@/lib/hooks";
+import { HOME_BY_ROLE, errMsg, useMe } from "@/lib/hooks";
 import { beginSession } from "@/lib/session";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"email" | "otp">("email");
   const [otp, setOtp] = useState({ cc: "+91", phone: "", code: "", challenge: "" });
+  const me = useMe();
   const done = (u: User) => {
     beginSession();
     qc.setQueryData(["me"], u);
@@ -64,6 +65,12 @@ export default function Login() {
       <header className="relative flex items-center justify-between px-5 py-4 sm:px-10">
         <Link to="/"><Logo /></Link><ThemeToggle />
       </header>
+      {me.data && (
+        <div className="relative mx-auto mb-2 flex max-w-xl items-center gap-3 rounded-2xl border bg-card/90 px-4 py-3 shadow-sm backdrop-blur" data-testid="already-signed-in-banner">
+          <p className="min-w-0 flex-1 text-sm">You're already signed in as <b>{me.data.name}</b>. You stay signed in on this device.</p>
+          <Button size="sm" onClick={() => nav(HOME_BY_ROLE[me.data!.role])} data-testid="continue-signed-in-button">Continue</Button>
+        </div>
+      )}
       <div className="relative mx-auto grid max-w-6xl gap-10 px-5 pb-16 pt-6 sm:px-10 lg:grid-cols-[1.1fr_0.9fr]">
         <div>
           <MockBadge label="Interactive preview · seeded demo data" />

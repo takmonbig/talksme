@@ -1,18 +1,21 @@
 """Push subscriptions (VAPID) and WebRTC ICE/TURN servers (Metered)."""
 import asyncio
+import hashlib
 import json
 import logging
 import os
 import time
 
 import httpx
+from agora_token_builder import RtcTokenBuilder
 import websockets
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
-from lib.auth import current_user
+from lib.auth import current_user, require
+from lib.conv import can_access
 from lib.db import db
 from lib.util import now_iso
-from models.schemas import IceServersOut, Ok, PushKeyOut, PushSubscriptionIn
+from models.schemas import AgoraJoinOut, BackupPhoneIn, IceServersOut, Ok, PushKeyOut, PushSubscriptionIn
 
 router = APIRouter()
 log = logging.getLogger("turn")
@@ -69,4 +72,45 @@ async def push_subscribe(body: PushSubscriptionIn, user: dict = Depends(current_
     await db.push_subscriptions.update_one({"endpoint": body.endpoint},
                                            {"$set": {"endpoint": body.endpoint, "keys": body.keys.model_dump(), "user_id": user["id"], "updated_at": now_iso()}},
                                            upsert=True)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"notify_push": True}})
     return Ok(message="Notifications are on for this device")
+
+
+# ---------- optional WhatsApp backup number for no-login guests ----------
+@router.post("/me/backup-phone", response_model=Ok)
+async def backup_phone(body: BackupPhoneIn, user: dict = Depends(require("customer"))):
+    phone = f"{body.country_code}{body.phone}"
+    taken = await db.users.find_one({"phone": phone, "role": "customer", "id": {"$ne": user["id"]}}, {"_id": 0, "id": 1})
+    if taken:
+        raise HTTPException(409, "This number already has chats with us. Use 'Restore chats' on the landing page to verify it by WhatsApp code.")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"phone": phone}})
+    await db.customer_profiles.update_many({"user_id": user["id"]}, {"$set": {"phone": phone}})
+    await db.conversations.update_many({"customer_user_id": user["id"]}, {"$set": {"customer_phone": phone}})
+    await db.messages.update_many({"kind": "phone_request", "conversation_id": {"$in": await db.conversations.distinct("id", {"customer_user_id": user["id"]})}},
+                                  {"$set": {"kind": "phone_saved", "text": f"✅ WhatsApp number {phone} saved for backup."}})
+    return Ok(message="WhatsApp number saved for backup")
+
+
+@router.post("/me/backup-phone/skip", response_model=Ok)
+async def backup_skip(user: dict = Depends(require("customer"))):
+    await db.users.update_one({"id": user["id"]}, {"$set": {"backup_skipped": True}})
+    await db.messages.update_many({"kind": "phone_request", "conversation_id": {"$in": await db.conversations.distinct("id", {"customer_user_id": user["id"]})}},
+                                  {"$set": {"kind": "phone_skipped", "text": "You can add a WhatsApp backup number any time from the ⋮ menu."}})
+    return Ok(message="Skipped")
+
+
+# ---------- Agora voice transport (signalling stays on our WebSocket) ----------
+@router.get("/calls/{cid}/agora", response_model=AgoraJoinOut)
+async def agora_join(cid: str, user: dict = Depends(current_user)):
+    c = await db.conversations.find_one({"id": cid}, {"_id": 0})
+    if not c or not can_access(user, c):
+        raise HTTPException(404, "Conversation not found")
+    app_id = os.environ.get("AGORA_APP_ID")
+    if not app_id:
+        raise HTTPException(503, "Voice calling is not configured")
+    uid = int.from_bytes(hashlib.sha256(user["id"].encode()).digest()[:4], "big") % 2_000_000_000 + 1  # stable numeric Agora uid
+    channel = f"call_{cid}"
+    cert = os.environ.get("AGORA_APP_CERTIFICATE")
+    # Secured projects (App Certificate on) need a server-signed token; "App ID only" projects join with token=None.
+    token = RtcTokenBuilder.buildTokenWithUid(app_id, cert, channel, uid, 1, int(time.time()) + 3600) if cert else None
+    return AgoraJoinOut(app_id=app_id, channel=channel, uid=uid, token=token)

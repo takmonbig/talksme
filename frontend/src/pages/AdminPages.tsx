@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { extractPixelId } from "@/lib/pixel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, Copy, ExternalLink, Globe, Monitor, Plus, Smartphone, Trash2, UserPlus, X } from "lucide-react";
@@ -315,7 +316,8 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
             <label className="flex items-center gap-2 border-t pt-3 text-sm"><Checkbox checked={f.calls_enabled} onCheckedChange={(v) => set("calls_enabled", !!v)} data-testid="builder-calls-checkbox" /> Enable audio calling on this page</label>
           </TabsContent>
           <TabsContent value="pixel" className="space-y-3 pt-3">
-            <div className="space-y-1"><Label>Meta Pixel ID</Label><Input value={f.pixel_id} onChange={(e) => set("pixel_id", e.target.value.replace(/\D/g, ""))} placeholder="e.g. 123456789012345" data-testid="builder-pixel-input" /></div>
+            <div className="space-y-1"><Label>Meta Pixel ID</Label><Input value={f.pixel_id} onChange={(e) => set("pixel_id", extractPixelId(e.target.value))} placeholder="Paste Pixel ID or the full Meta Pixel code" data-testid="builder-pixel-input" />
+              <p className="text-[11px] text-muted-foreground">{f.pixel_id ? <>Live: PageView fires on every visit, and Lead + Contact fire when a visitor taps Chat. Check it in Meta Events Manager, then <b>Test events</b>.</> : "You can paste the whole Meta Pixel code; we keep just the ID."}</p></div>
             <p className="text-xs text-muted-foreground">Fires PageView, Lead and Contact once per visit, only after visitor consent. Phone numbers, chat content and payment details are never sent.</p>
             <MockBadge label="Meta Pixel mocked · events logged to console" />
           </TabsContent>

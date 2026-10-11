@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Archive, Ban, BellOff, LogOut, MoreVertical, Search, Settings, ShieldAlert, WifiOff } from "lucide-react";
+import { Archive, Ban, BellOff, LogOut, MoreVertical, Search, Settings, ShieldAlert, ShieldCheck, WifiOff } from "lucide-react";
+import { BackupPhoneDialog } from "@/components/chat/BackupPhone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,6 +76,7 @@ export default function CustomerInbox() {
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"all" | "unread" | "archived">("all");
   const [prefs, setPrefs] = useState(false);
+  const [backup, setBackup] = useState(false);
   const [report, setReport] = useState(false);
   const isCustomer = me.data?.role === "customer";
   const list = useQuery({
@@ -114,6 +116,7 @@ export default function CustomerInbox() {
               <DropdownMenuTrigger render={<Button variant="ghost" size="icon" data-testid="customer-menu-button" />}><MoreVertical className="h-4 w-4" /></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem onClick={() => setPrefs(true)} data-testid="customer-menu-prefs"><Settings className="h-4 w-4" />Profile & notifications</DropdownMenuItem>
+                {!me.data?.phone && <DropdownMenuItem onClick={() => setBackup(true)} data-testid="customer-menu-backup-phone"><ShieldCheck className="h-4 w-4" />Add WhatsApp backup number</DropdownMenuItem>}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => endSession("/demo")} data-testid="customer-menu-logout"><LogOut className="h-4 w-4" />Sign out</DropdownMenuItem>
               </DropdownMenuContent>
@@ -174,6 +177,7 @@ export default function CustomerInbox() {
         </main>
       </div>
       <PrefsDialog me={me.data} open={prefs} onOpenChange={setPrefs} />
+      <BackupPhoneDialog open={backup} onOpenChange={setBackup} />
       {conv && <ReportDialog conv={conv} open={report} onOpenChange={setReport} />}
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { apiGet } from "./api";
 import { showLocalNotification } from "./pwa";
 import { playMessageTone } from "./sound";
@@ -41,13 +42,16 @@ export function useRealtime(me: { id: string; role: string; notify_sound: boolea
           const fromOther = !!e.sender_id && e.sender_id !== u?.id;
           if (fromOther && !watching.has(e.conversation_id) && u?.role !== "superadmin") {
             if (u?.notify_sound !== false) playMessageTone();
-            if (document.hidden) {
+            const viewing = !document.hidden && (location.pathname + location.search).includes(e.conversation_id);
+            if (!viewing) {
               apiGet<{ customer_name: string; org_name: string; employee_name: string; last_message: string; muted: boolean }>(`/conversations/${e.conversation_id}`)
                 .then((c) => {
                   if (c.muted) return;
                   const customer = u?.role === "customer";
-                  showLocalNotification(customer ? `${c.employee_name || c.org_name} · ${c.org_name}` : c.customer_name, c.last_message,
-                    customer ? `/chat/${e.conversation_id}` : `/employee/inbox?c=${e.conversation_id}`, `msg-${e.conversation_id}`);
+                  const title = customer ? `${c.employee_name || c.org_name} · ${c.org_name}` : c.customer_name;
+                  const url = customer ? `/chat/${e.conversation_id}` : u?.role === "admin" ? `/admin/conversations` : `/employee/inbox?c=${e.conversation_id}`;
+                  if (document.hidden) showLocalNotification(title, c.last_message, url, `msg-${e.conversation_id}`);
+                  else toast(title, { description: c.last_message, action: { label: "Open", onClick: () => { location.href = url; } } });
                 }).catch(() => undefined);
             }
           }
