@@ -4,7 +4,7 @@ import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  BarChart3, Building2, CreditCard, FileClock, Globe, Inbox, LayoutDashboard, LayoutTemplate, LogOut, Megaphone, Menu,
+  BarChart3, Bell, Building2, CreditCard, FileClock, Globe, Inbox, LayoutDashboard, LayoutTemplate, Headphones, LogOut, Megaphone, Menu,
   MessagesSquare, RotateCcw, Search, Settings, ShieldCheck, Users, Wallet, Contact, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ const NAV: Record<Exclude<Role, "customer">, NavItem[]> = {
     { to: "/admin/deposits", label: "Deposit ledger", icon: Wallet, feature: "deposits" },
     { to: "/admin/analytics", label: "Analytics", icon: BarChart3, feature: "advanced_analytics" },
     { to: "/admin/broadcasts", label: "Broadcasts", icon: Megaphone, feature: "broadcasts" },
+    { to: "/admin/notifications", label: "Notifications", icon: Bell },
     { to: "/admin/billing", label: "Billing", icon: CreditCard },
     { to: "/admin/settings", label: "Settings", icon: Settings },
   ],
@@ -44,6 +45,8 @@ const NAV: Record<Exclude<Role, "customer">, NavItem[]> = {
     { to: "/superadmin/organizations", label: "Organizations", icon: Building2 },
     { to: "/superadmin/customers", label: "Customer explorer", icon: Contact },
     { to: "/superadmin/search", label: "Chat search", icon: Search },
+    { to: "/superadmin/landing-pages", label: "All landing pages", icon: LayoutTemplate },
+    { to: "/superadmin/support", label: "Support inbox", icon: Headphones },
     { to: "/superadmin/employee-compare", label: "Employee comparison", icon: BarChart3 },
     { to: "/superadmin/admins", label: "Admins", icon: ShieldCheck },
     { to: "/superadmin/subscriptions", label: "Subscriptions", icon: Layers },
@@ -54,35 +57,6 @@ const NAV: Record<Exclude<Role, "customer">, NavItem[]> = {
   ],
 };
 
-export function ResetDemoButton({ compact }: { compact?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const m = useMutation({
-    mutationFn: () => apiPost<Ok>("/demo/reset"),
-    onSuccess: async () => { toast.success("Demo data reset"); await endSession("/demo"); },
-    onError: toastErr,
-  });
-  return (
-    <>
-      <Button variant="outline" size={compact ? "icon-sm" : "sm"} onClick={() => setOpen(true)} data-testid="reset-demo-button" aria-label="Reset demo">
-        <RotateCcw className="h-4 w-4" />{!compact && <span>Reset demo</span>}
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reset demo data?</DialogTitle>
-            <DialogDescription>All organizations, chats, deposits and settings return to the seeded demo state. You'll be signed out.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} data-testid="reset-demo-cancel">Cancel</Button>
-            <Button variant="destructive" onClick={() => m.mutate()} disabled={m.isPending} data-testid="reset-demo-confirm">
-              {m.isPending ? "Resetting…" : "Reset everything"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
 
 function SideNav({ items, onNav }: { items: NavItem[]; onNav?: () => void }) {
   return (
@@ -163,7 +137,6 @@ export function AppShell({ role }: { role: Exclude<Role, "customer"> }) {
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setOpen(true)} data-testid="mobile-nav-button"><Menu className="h-5 w-5" /></Button>
             <div className="lg:hidden"><Logo compact /></div>
             <div className="ml-auto flex items-center gap-1.5">
-              <ResetDemoButton compact />
               <ThemeToggle />
               {me.data && (
                 <div className="flex items-center gap-2 rounded-full border py-1 pl-1 pr-3" data-testid="header-user">

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
+import { Linkify } from "@/components/chat/Linkify";
 import { toast } from "sonner";
 import {
   ArrowLeft, Check, CheckCheck, Clock, CornerUpLeft, FileText, Image as ImageIcon, Mic, Paperclip, Search, SendHorizontal,
@@ -48,7 +50,9 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
   const qc = useQueryClient();
   const key = ["messages", conv.id];
   const mine = viewer === "customer" ? "customer" : "employee";
-  const [text, setText] = useState("");
+  const loc = useLocation();
+  // Landing-page default message: prefilled once for a brand-new chat (customer can edit or send it).
+  const [text, setText] = useState(() => (viewer === "customer" && (loc.state as { prefill?: string } | null)?.prefill) || "");
   const [reply, setReply] = useState<Message | null>(null);
   const [search, setSearch] = useState<string | null>(null);
   const [recording, setRecording] = useState<number | null>(null);
@@ -154,7 +158,9 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
       </div>
       {viewer === "customer" && <InstallBanner />}
 
-      <div className="chat-wall min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6" data-testid="chat-messages">
+      <div className="relative min-h-0 flex-1">
+      <a href="https://talksme.in" target="_blank" rel="noopener noreferrer" className="absolute bottom-2 right-3 z-10 rounded-full border bg-card/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" data-testid="powered-by-talksme">Powered by <b className="text-primary">TalksMe</b></a>
+      <div className="chat-wall h-full overflow-y-auto px-3 pb-8 pt-4 sm:px-6" data-testid="chat-messages">
         {q.isLoading && <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className={cn("h-12 w-2/3", i % 2 && "ml-auto")} />)}</div>}
         {q.isError && <p className="text-center text-sm text-muted-foreground">Messages unavailable — reconnecting…</p>}
         <div className="mx-auto flex max-w-3xl flex-col gap-1.5">
@@ -172,7 +178,8 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
                   {viewer === "admin" && <p className="mb-0.5 text-[10px] font-semibold text-primary">{m.sender_name}</p>}
                   {m.reply_preview && <div className="mb-1 rounded-md border-l-2 border-primary bg-black/5 px-2 py-1 text-xs opacity-80 dark:bg-white/5">{m.reply_preview}</div>}
                   {m.attachment && <AttachmentView a={m.attachment} />}
-                  {m.text && <p className="whitespace-pre-wrap break-words" data-testid="chat-message-text">{m.text}</p>}
+                  {m.text && <p className="whitespace-pre-wrap break-words" data-testid="chat-message-text"><Linkify text={m.text} /></p>}
+                  {m.deleted_by_customer && <p className="mt-0.5 text-[10px] italic text-muted-foreground" data-testid="chat-deleted-by-customer">Customer deleted this for themselves. Still visible to your team.</p>}
                   <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] opacity-60">
                     {clock(m.created_at)}{own && <Ticks m={m} />}
                   </div>
@@ -193,6 +200,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
           {search && msgs.length === 0 && <p className="text-center text-sm text-muted-foreground">No messages match "{search}"</p>}
           <div ref={endRef} />
         </div>
+      </div>
       </div>
 
       {viewer === "admin" ? (

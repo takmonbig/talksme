@@ -1,4 +1,12 @@
 import { Link } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { Headphones } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { apiPost } from "@/lib/api";
+import { beginSession } from "@/lib/session";
+import { toastErr } from "@/lib/hooks";
+import type { StartChatOut } from "@/lib/types";
 import { ArrowRight, BarChart3, CheckCheck, CreditCard, LayoutTemplate, MessageCircle, Phone, ShieldCheck, Shuffle, Wallet } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Logo, MockBadge, ThemeToggle } from "@/components/common";
@@ -13,6 +21,16 @@ const FEATURES = [
   { icon: CreditCard, t: "Seat-based billing", d: "Monthly & yearly plans in ₹ with UPI QR payment and approval." },
 ];
 
+function SupportButton({ className, testid }: { className?: string; testid: string }) {
+  const nav = useNavigate();
+  const m = useMutation({
+    mutationFn: () => apiPost<StartChatOut>("/public/support/start", {}),
+    onSuccess: (r) => { beginSession(); if (r.conversation_id) nav(`/chat/${r.conversation_id}`); },
+    onError: toastErr,
+  });
+  return <Button className={cn("gap-2", className)} disabled={m.isPending} onClick={() => m.mutate()} data-testid={testid}><Headphones className="h-4 w-4" />{m.isPending ? "Connecting…" : "Connect with Support Agent"}</Button>;
+}
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-background">
@@ -26,6 +44,7 @@ export default function Home() {
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
+            <SupportButton testid="home-support-header-button" className="hidden sm:inline-flex" />
             <Link to="/demo" className={cn(buttonVariants(), "bg-brand text-white")} data-testid="home-open-demo-button">Open demo <ArrowRight className="h-4 w-4" /></Link>
           </div>
         </div>
@@ -42,6 +61,7 @@ export default function Home() {
             <p className="mt-5 max-w-xl text-lg text-muted-foreground">talksme.in OmniChat brings WhatsApp-style messaging, multi-employee CRM, landing pages and a manual deposit ledger into one white-label platform — with a single app for your customers.</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/demo" className={cn(buttonVariants({ size: "lg" }), "bg-brand h-12 px-6 text-white")} data-testid="home-hero-demo-button">Try the interactive demo</Link>
+              <SupportButton testid="home-support-button" className="h-12 px-6" />
             </div>
             <div className="mt-10 flex flex-wrap gap-8 text-sm">
               {[["3", "demo orgs"], ["50", "conversations"], ["30", "deposits"], ["4", "role layers"]].map(([n, l]) => (

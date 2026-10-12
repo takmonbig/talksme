@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { OrgBulkBar, OrgCheckbox, OrgDangerZone, ResetLinkButton, useOrgSearch } from "@/pages/SuperControl";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -163,7 +164,8 @@ function OrgDetailsDialog({ id, onClose }: { id: string; onClose: () => void }) 
                     <TableCell className="text-right">{u.open_conversations}</TableCell><TableCell className="text-right">{money(u.deposits_total)}</TableCell>
                     <TableCell><div className="flex justify-end gap-1">
                       {u.role === "employee" && <Button size="xs" variant="outline" onClick={() => nav(`/superadmin/customers?org=${id}&employee=${u.id}`)} data-testid="sa-staff-customers-button">Customers & chats</Button>}
-                      <Button size="xs" variant="ghost" onClick={() => setReset({ id: u.id, name: u.name })} data-testid="sa-reset-password-button">Reset password</Button>
+                      <ResetLinkButton uid={u.id} name={u.name} />
+                      <Button size="xs" variant="ghost" onClick={() => setReset({ id: u.id, name: u.name })} data-testid="sa-reset-password-button">Set password</Button>
                       <Button size="xs" variant="outline" onClick={() => toggleUser.mutate({ id: u.id, active: !u.active })} data-testid="sa-user-toggle">{u.active ? "Deactivate" : "Activate"}</Button>
                     </div></TableCell>
                   </TableRow>
@@ -174,6 +176,7 @@ function OrgDetailsDialog({ id, onClose }: { id: string; onClose: () => void }) 
               <div><p className="mb-1 font-semibold">Landing pages</p>{d.data.landing_pages.map((l) => <p key={l.id} className="text-xs">{l.title} · /{l.slug} · {l.views} views · {l.leads} leads {l.published ? "" : "(unpublished)"}</p>)}</div>
               <div><p className="mb-1 font-semibold">Invoices</p>{d.data.invoices.slice(0, 8).map((i) => <p key={i.id} className="text-xs">{dateTime(i.date)} · {money(i.amount)} · {i.status}</p>)}</div>
             </div>
+            <OrgDangerZone org={o!} onDeleted={onClose} />
           </div>
         )}
         {reset && <ResetPasswordDialog name={reset.name} endpoint={`/superadmin/users/${reset.id}/reset-password`} onClose={() => setReset(null)} />}
@@ -192,26 +195,37 @@ export function SuperOrganizations() {
   const [suspend, setSuspend] = useState<OrgRow | null>(null);
   const [reason, setReason] = useState("");
   const m = useMutation({ mutationFn: (x: { id: string; b: Record<string, unknown> }) => apiPatch<OrgRow>(`/superadmin/organizations/${x.id}`, x.b), onSuccess: (o) => { toast.success(`${o.name} updated`); qc.invalidateQueries({ queryKey: ["sa-orgs"] }); setSuspend(null); setReason(""); }, onError: toastErr });
-  const t = useTable(q.data, { search: (o) => `${o.name} ${o.slug} ${o.domain}` });
+  const [search, setSearch] = useState("");
+  const [sel, setSel] = useState<string[]>([]);
+  const found = useOrgSearch(search);
+  const filtered = useMemo(() => (q.data ?? []).filter((o) => {
+    if (search.trim().length < 2) return true;
+    const s = search.toLowerCase();
+    return `${o.name} ${o.slug} ${o.domain} ${o.id}`.toLowerCase().includes(s) || (found.data ?? []).includes(o.id);
+  }), [q.data, search, found.data]);
+  const t = useTable(filtered, { search: () => "" });
+  const allOn = t.rows.length > 0 && t.rows.every((o) => sel.includes(o.id));
   return (
     <div>
       <PageHeader title="Organizations" subtitle="Create tenants, set plans and seat limits, suspend or reactivate." actions={<Button onClick={() => setOpen(true)} data-testid="create-org-button"><Plus className="h-4 w-4" /> New organization</Button>} />
       <div className="rounded-2xl border bg-card">
-        <div className="border-b p-3"><Input value={t.q} onChange={(e) => t.setQ(e.target.value)} placeholder="Search organizations" data-testid="orgs-search-input" /></div>
+        <div className="border-b p-3"><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, domain, org ID, or Admin name / email / phone" data-testid="orgs-search-input" /></div>
+        <div className="px-3 pt-3"><OrgBulkBar selected={sel} orgs={q.data ?? []} plans={plans.data ?? []} onDone={() => setSel([])} /></div>
         <Table>
-          <TableHeader><TableRow><TableHead><SortHead label="Organization" k="name" t={t} /></TableHead><TableHead>Plan</TableHead><TableHead>Seats</TableHead><TableHead>Status</TableHead><TableHead className="text-right"><SortHead label="Customers" k="customers" t={t} /></TableHead><TableHead /></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead className="w-8"><OrgCheckbox checked={allOn} onChange={(v) => setSel(v ? [...new Set([...sel, ...t.rows.map((o) => o.id)])] : sel.filter((i) => !t.rows.some((o) => o.id === i)))} testid="org-select-all" /></TableHead><TableHead><SortHead label="Organization" k="name" t={t} /></TableHead><TableHead>Plan</TableHead><TableHead>Seats</TableHead><TableHead>Status</TableHead><TableHead className="text-right"><SortHead label="Customers" k="customers" t={t} /></TableHead><TableHead /></TableRow></TableHeader>
           <TableBody>
             {t.rows.map((o) => (
               <TableRow key={o.id} data-testid="org-row">
+                <TableCell><OrgCheckbox checked={sel.includes(o.id)} onChange={(v) => setSel(v ? [...sel, o.id] : sel.filter((i) => i !== o.id))} testid="org-select-checkbox" /></TableCell>
                 <TableCell><p className="font-medium">{o.name}</p><p className="font-mono text-xs text-muted-foreground">{o.domain || o.slug}</p></TableCell>
                 <TableCell><Select value={o.plan_id} onValueChange={(v: string) => m.mutate({ id: o.id, b: { plan_id: v } })}><SelectTrigger size="sm" className="w-32" data-testid="org-plan-select"><SelectValue>{(v) => plans.data?.find((p) => p.id === v)?.name ?? o.plan_name}</SelectValue></SelectTrigger><SelectContent>{plans.data?.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></TableCell>
-                <TableCell><Input type="number" className="h-8 w-20" defaultValue={o.seats} onBlur={(e) => Number(e.target.value) !== o.seats && m.mutate({ id: o.id, b: { seats: Number(e.target.value) } })} data-testid="org-seats-input" /></TableCell>
+                <TableCell><Input key={`${o.id}-${o.seats}`} type="number" className="h-8 w-20" defaultValue={o.seats} onBlur={(e) => Number(e.target.value) !== o.seats && m.mutate({ id: o.id, b: { seats: Number(e.target.value) } })} data-testid="org-seats-input" /></TableCell>
                 <TableCell><StatusBadge status={o.status} testid="org-status-badge" /></TableCell>
                 <TableCell className="text-right">{o.customers}</TableCell>
                 <TableCell><div className="flex justify-end gap-1">
                   <Button size="xs" onClick={() => setDetails(o.id)} data-testid="org-details-button">Open</Button>
                   <Button size="xs" variant="outline" onClick={() => setAccess(o)} data-testid="org-access-button"><Eye className="h-3.5 w-3.5" /> Access</Button>
-                  {o.status === "suspended" ? <Button size="xs" onClick={() => m.mutate({ id: o.id, b: { status: "active", reason: "Reactivated" } })} data-testid="org-reactivate-button">Reactivate</Button>
+                  {o.status !== "active" && o.status !== "trial" ? <Button size="xs" onClick={() => m.mutate({ id: o.id, b: { status: "active", reason: "Reactivated" } })} data-testid="org-reactivate-button">Reactivate</Button>
                     : <Button size="xs" variant="destructive" onClick={() => setSuspend(o)} data-testid="org-suspend-button">Deactivate</Button>}
                 </div></TableCell>
               </TableRow>

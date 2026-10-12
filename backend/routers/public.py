@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 async def _published(slug: str, org_slug: str | None = None) -> tuple[dict, dict]:
-    q = {"slug": slug, "published": True}
+    q = {"slug": slug, "published": True, "archived": {"$ne": True}, "deleted": {"$ne": True}}
     if org_slug:
         org = await db.organizations.find_one({"slug": org_slug}, {"_id": 0})
         if not org:
@@ -45,13 +45,18 @@ async def start_chat(org_slug: str, slug: str, body: StartChatIn, response: Resp
     lp, _ = await _published(slug, org_slug)
     phone = f"{body.country_code or '+91'}{body.phone}" if body.phone else None
     preferred = body.employee_id
-    if body.image_id:
-        img = next((i for i in lp.get("images", []) if i["id"] == body.image_id), None)
-        preferred = img.get("employee_id") if img else preferred
+    img = next((i for i in lp.get("images", []) if i["id"] == body.image_id), None) if body.image_id else None
+    if img:
+        preferred = img.get("employee_id") or preferred
+    first_msg = ((img or {}).get("default_message") or lp.get("default_message") or "").strip()
+
+    async def done(u: dict) -> StartChatOut:
+        cid = await open_conversation(u, lp, preferred)
+        return StartChatOut(status="ok", conversation_id=cid, prefill=await default_message(u, lp, cid, first_msg))
     # An already-authenticated customer with this phone is an authorized session.
     # Returning visitor on this device (session cookie): straight back into chat, no login of any kind.
     if viewer and viewer["role"] == "customer" and (not phone or viewer.get("phone") == phone):
-        return StartChatOut(status="ok", conversation_id=await open_conversation(viewer, lp, preferred))
+        return await done(viewer)
     existing = await db.users.find_one({"phone": phone, "role": "customer"}, {"_id": 0}) if phone else None
     if existing:
         # Real WhatsApp OTP (BlackSMS) before any existing history is disclosed.
@@ -62,7 +67,23 @@ async def start_chat(org_slug: str, slug: str, body: StartChatIn, response: Resp
             "calls_enabled": True, "guest": True, "target": 0, "notify_sound": True, "notify_push": True, "created_at": now_iso()}
     await db.users.insert_one(dict(user))
     set_session(response, user)
-    return StartChatOut(status="ok", conversation_id=await open_conversation(user, lp, preferred))
+    return await done(user)
+
+
+async def default_message(user: dict, lp: dict, cid: str, text: str) -> str:
+    """Landing/service default message: auto-sent ONCE as the customer (if Admin enabled it), otherwise prefilled."""
+    if not text or await db.messages.find_one({"conversation_id": cid, "sender_role": "customer"}, {"_id": 1}):
+        return ""
+    if not lp.get("auto_send_default"):
+        return text
+    key = f"default-msg-{cid}"  # idempotent: refreshes / double clicks / retries can't send it twice
+    if not await db.messages.find_one({"conversation_id": cid, "idempotency_key": key}, {"_id": 1}):
+        t = now_iso()
+        await db.messages.insert_one({"id": new_id(), "conversation_id": cid, "org_id": lp["org_id"], "sender_role": "customer", "sender_id": user["id"],
+                                      "sender_name": user["name"], "text": text, "attachment": None, "reply_to": None, "reply_preview": "",
+                                      "status": "sent", "created_at": t, "idempotency_key": key, "hidden_for": []})
+        await db.conversations.update_one({"id": cid}, {"$set": {"last_message": text[:120], "last_message_at": t}, "$inc": {"unread_employee": 1}})
+    return ""
 
 
 @router.post("/public/verify", response_model=StartChatOut)

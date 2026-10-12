@@ -117,6 +117,8 @@ class CustomerProfile(Base):
 
 
 class CustomerUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=80)
+    phone: Optional[str] = Field(None, pattern=r"^\+?\d{6,16}$")
     calls_allowed: Optional[bool] = None
     labels: Optional[list[str]] = None
     stage: Optional[str] = None
@@ -187,6 +189,7 @@ class Message(Base):
     reply_preview: str = ""
     status: str = "sent"
     kind: str = "text"  # "phone_request" = the "share your WhatsApp number for backup" card
+    deleted_by_customer: bool = False  # staff view: customer hid this for themselves only
     created_at: str
 
 
@@ -278,9 +281,9 @@ class DepositIn(BaseModel):
     customer_id: str
     amount: float = Field(gt=0, le=100_000_000)
     currency: Literal["INR", "USD", "EUR", "AED", "GBP"] = "INR"
-    product: str = Field(min_length=2, max_length=120)
+    product: str = Field("Payment", min_length=2, max_length=120)
     method: Literal["UPI", "Bank Transfer", "Card", "Cash", "Wallet", "Other"]
-    reference: str = Field(min_length=3, max_length=80)
+    reference: str = Field("", max_length=80)
     payment_date: str = Field(min_length=10, max_length=10)
     notes: str = Field("", max_length=1000)
     proof_name: str = ""
@@ -314,6 +317,8 @@ class LPImage(Base):
     id: str
     url: str
     label: str
+    description: str = ""
+    default_message: str = ""
     employee_id: Optional[str] = None
 
 
@@ -337,6 +342,10 @@ class LandingPage(Base):
     pixel_id: str = ""
     published: bool = False
     available_24_7: bool = False
+    default_message: str = ""
+    auto_send_default: bool = False
+    employee_can_edit_message: bool = False
+    archived: bool = False
     views: int = 0
     leads: int = 0
     created_at: str
@@ -360,6 +369,9 @@ class LandingPageIn(BaseModel):
     pixel_id: str = Field("", pattern=r"^(\d{6,20})?$")
     published: bool = False
     available_24_7: bool = False
+    default_message: str = Field("", max_length=500)
+    auto_send_default: bool = False
+    employee_can_edit_message: bool = False
 
     @field_validator("pixel_id", mode="before")
     @classmethod
@@ -405,6 +417,7 @@ class StartChatOut(Base):
     conversation_id: Optional[str] = None
     challenge_id: Optional[str] = None
     mock_code: Optional[str] = None
+    prefill: str = ""
 
 
 class VerifyIn(BaseModel):
@@ -536,7 +549,7 @@ class OrgCreateIn(BaseModel):
 
 
 class OrgPatch(BaseModel):
-    status: Optional[Literal["active", "trial", "suspended"]] = None
+    status: Optional[Literal["active", "trial", "suspended", "archived", "deleted"]] = None
     seats: Optional[int] = Field(None, ge=1)
     plan_id: Optional[str] = None
     domain: Optional[str] = None
@@ -718,3 +731,112 @@ class AgoraJoinOut(Base):
     channel: str
     uid: int
     token: Optional[str] = None
+
+
+# ---------- super admin control center / platform support / admin notifications ----------
+class OrgBulkIn(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=500)
+    action: Literal["activate", "suspend", "archive", "delete", "restore", "plan", "seats"]
+    plan_id: Optional[str] = None
+    seats: Optional[int] = Field(None, ge=1, le=10000)
+    reason: str = Field("", max_length=300)
+
+
+class OrgBulkOut(Base):
+    updated: int
+    skipped: list[str] = []
+
+
+class ResetLinkOut(Base):
+    url: str
+    expires_at: str
+
+
+class PasswordResetIn(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class OrgResetPreview(Base):
+    org_id: str
+    org_name: str
+    will_reset: dict[str, int]
+    preserved: list[str]
+
+
+class OrgResetIn(BaseModel):
+    password: str = Field(min_length=1)
+    confirm_name: str
+    reason: str = Field(min_length=5, max_length=300)
+
+
+class JobOut(Base):
+    id: str
+    kind: str
+    status: str
+    org_id: str = ""
+    result: dict[str, Any] = {}
+    created_at: str
+    finished_at: str = ""
+
+
+class SALandingRow(LandingPage):
+    org_name: str = ""
+    org_slug: str = ""
+    domain: str = ""
+    employee_names: list[str] = []
+    conversions: int = 0
+    deleted: bool = False
+
+
+class SALandingPatch(BaseModel):
+    published: Optional[bool] = None
+    archived: Optional[bool] = None
+    title: Optional[str] = Field(None, min_length=2, max_length=120)
+    cta_text: Optional[str] = Field(None, min_length=2, max_length=40)
+    description: Optional[str] = Field(None, max_length=600)
+
+
+class SupportStartIn(BaseModel):
+    customer_user_id: str
+    text: str = Field(min_length=1, max_length=4000)
+    kind: Literal["support", "announcement"] = "support"
+
+
+class SupportIdentity(Base):
+    display_name: str = "TalksMe Support"
+    avatar: str = ""
+
+
+class SACustomerPick(Base):
+    user_id: str
+    name: str
+    phone: str = ""
+    orgs: list[str] = []
+    opted_in: bool = False
+
+
+class NotifyIn(BaseModel):
+    customer_id: str
+    title: str = Field(min_length=1, max_length=80)
+    body: str = Field(min_length=1, max_length=300)
+    url: str = Field("", max_length=500)
+
+
+class NotificationRecord(Base):
+    id: str
+    org_id: str
+    customer_id: str
+    customer_name: str
+    title: str
+    body: str
+    url: str = ""
+    status: str
+    devices: int = 0
+    delivered: int = 0
+    sent_by: str = ""
+    created_at: str
+
+
+class DefaultMessageIn(BaseModel):
+    default_message: str = Field("", max_length=500)

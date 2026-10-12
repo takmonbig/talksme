@@ -45,7 +45,7 @@ export default function PublicLanding() {
     beginSession();
     const url = `/chat/${r.conversation_id}`;
     // App installed but we're in the browser: offer to continue in the app; otherwise go straight into the chat.
-    appInstalled().then((yes) => { if (yes && !isStandalone()) { setOpen(false); setInApp(url); } else nav(url); });
+    appInstalled().then((yes) => { if (yes && !isStandalone()) { setOpen(false); setInApp(url); } else nav(url, { state: { prefill: r.prefill } }); });
   };
   // Chat Now = instant chat as a Guest (no login). The restore dialog sends a phone number to recover old chats.
   const start = useMutation({

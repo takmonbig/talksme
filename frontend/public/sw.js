@@ -44,3 +44,15 @@ self.addEventListener("notificationclick", (e) => {
     return self.clients.openWindow(url);
   }));
 });
+
+// Browser rotated/expired the push subscription: renew it and re-register with the backend (cookie auth).
+self.addEventListener("pushsubscriptionchange", (e) => {
+  e.waitUntil((async () => {
+    const { public_key } = await (await fetch("/api/push/key")).json();
+    const pad = "=".repeat((4 - (public_key.length % 4)) % 4);
+    const raw = atob((public_key + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    const sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, (c) => c.charCodeAt(0)) });
+    const j = sub.toJSON();
+    await fetch("/api/push/subscribe", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys }) });
+  })().catch(() => undefined));
+});

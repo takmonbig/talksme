@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib.auth import require
-from lib.conv import get_conv, shape
+from lib.conv import PLATFORM_ORG, get_conv, shape
 from lib.db import db
 from lib.push import push_bg
 from lib.realtime import audience, publish
@@ -14,8 +14,16 @@ from models.schemas import (AssignIn, Call, CallIn, Conversation, ConversationPa
                             Transfer, TransferIn)
 
 router = APIRouter()
-chat_user = require("customer", "employee", "admin")
+chat_user = require("customer", "employee", "admin", "superadmin")
 _rate: dict[str, list[float]] = {}
+
+
+async def sender_display(user: dict) -> str:
+    """Super Admins always appear as the clearly-labelled TalksMe platform account, never as a business/employee."""
+    if user["role"] != "superadmin":
+        return user["name"]
+    ident = await db.platform_settings.find_one({"id": "support_identity"}, {"_id": 0}) or {}
+    return f"{ident.get('display_name') or 'TalksMe Support'} · {user['name'].split(' ')[0]}"
 
 
 @router.get("/conversations", response_model=list[Conversation])
@@ -25,6 +33,8 @@ async def list_conversations(filter: str = "all", q: str = "", user: dict = Depe
         query: dict = {"customer_user_id": user["id"]}
     elif r == "employee":
         query = {"org_id": user["org_id"], "employee_id": None if filter == "queue" else user["id"]}
+    elif r == "superadmin":
+        query = {"org_id": PLATFORM_ORG}  # Super Admin support inbox
     else:
         query = {"org_id": user["org_id"]}
         if filter == "queue":
@@ -59,7 +69,7 @@ async def get_conversation(cid: str, user: dict = Depends(chat_user)):
 @router.get("/conversations/{cid}/messages", response_model=list[Message])
 async def list_messages(cid: str, before: Optional[str] = None, limit: int = 100, user: dict = Depends(chat_user)):
     c = await get_conv(user, cid)
-    q: dict = {"conversation_id": cid, "hidden_for": {"$ne": user["id"]}}
+    q: dict = {"conversation_id": cid, "hidden_for": {"$ne": user["id"]}}  # delete-for-self only hides it for that viewer
     if before:
         q["created_at"] = {"$lt": before}
     msgs = await db.messages.find(q, {"_id": 0}).sort("created_at", -1).limit(min(limit, 200)).to_list(200)
@@ -68,6 +78,9 @@ async def list_messages(cid: str, before: Optional[str] = None, limit: int = 100
     await db.messages.update_many({"conversation_id": cid, "sender_role": other, "status": {"$ne": "read"}}, {"$set": {"status": "read"}})
     if c.get(f"unread_{side}", 0):
         await db.conversations.update_one({"id": cid}, {"$set": {f"unread_{side}": 0}})
+    if side == "employee":
+        for m in msgs:
+            m["deleted_by_customer"] = c["customer_user_id"] in m.get("hidden_for", [])
     return list(reversed(msgs))
 
 
@@ -99,7 +112,7 @@ async def send_message(cid: str, body: MessageIn, user: dict = Depends(chat_user
         orig = await db.messages.find_one({"id": body.reply_to, "conversation_id": cid}, {"_id": 0, "text": 1})
         preview = (orig or {}).get("text", "")[:80]
     msg = {"id": new_id(), "conversation_id": cid, "org_id": c["org_id"], "sender_role": side, "sender_id": user["id"],
-           "sender_name": user["name"], "text": body.text.strip(), "attachment": body.attachment.model_dump() if body.attachment else None,
+           "sender_name": await sender_display(user), "text": body.text.strip(), "attachment": body.attachment.model_dump() if body.attachment else None,
            "reply_to": body.reply_to, "reply_preview": preview, "status": "sent", "created_at": t,
            "idempotency_key": body.idempotency_key, "hidden_for": []}
     await db.messages.insert_one(dict(msg))

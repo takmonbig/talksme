@@ -24,18 +24,21 @@ def _send(sub: dict, data: dict) -> int:
         return 0
 
 
-async def push_to(uids: set[str], data: dict, only_if_not_visible: bool = True) -> None:
+async def push_to(uids: set[str], data: dict, only_if_not_visible: bool = True) -> int:
     """Push to every subscribed device of these users. Skips users who currently have the app open and visible."""
     targets = {u for u in uids if not (only_if_not_visible and await hub.visible_now(u))}
     if not targets:
-        return
+        return 0
     users = {u["id"] async for u in db.users.find({"id": {"$in": list(targets)}, "notify_push": {"$ne": False}}, {"_id": 0, "id": 1})}
     subs = await db.push_subscriptions.find({"user_id": {"$in": list(users)}}, {"_id": 0}).to_list(200)
+    ok = 0
     for sub in subs:
         code = await asyncio.to_thread(_send, sub, data)
         log.info("push %s -> %s", data.get("tag"), code)
-        if code in (404, 410):
+        ok += code in (200, 201, 202)
+        if code in (404, 410):  # expired subscription cleanup
             await db.push_subscriptions.delete_one({"endpoint": sub["endpoint"]})
+    return ok
 
 
 _tasks: set[asyncio.Task] = set()

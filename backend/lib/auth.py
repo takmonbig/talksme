@@ -54,8 +54,8 @@ async def current_user(request: Request) -> dict:
         raise HTTPException(401, "Not authenticated")
     if user["role"] in ("employee", "admin") and user.get("org_id"):
         org = await db.organizations.find_one({"id": user["org_id"]}, {"_id": 0, "status": 1})
-        if org and org.get("status") == "suspended":
-            raise HTTPException(403, "Organization suspended")
+        if org and org.get("status") in ("suspended", "archived", "deleted"):
+            raise HTTPException(403, f"Organization {org['status']}")
     return user
 
 

@@ -1,0 +1,99 @@
+{
+  "iteration": 4,
+  "summary": "Retest mode. Quick Payment reference bug is FIXED and verified: backend now auto-generates a unique 'MANUAL-XXXXXXXX' deposit reference whenever the incoming reference is empty or '-', so repeated Quick Payments no longer collide on org-wide reference uniqueness. Updated the backend test file (previously asserting the OLD buggy 409 behavior) to assert the fix, and extended the browser check to perform two consecutive quick payments (1500 then 700) on Rahul's conversation, both of which now succeed with success toasts and appear in /employee/deposits. Explicit non-empty duplicate references still correctly 409. Re-ran all 7 previously-passing browser checks and the 3 backend test files from iteration_3 - all pass. One check (default-message-prefill-and-auto-send) initially failed due to cross-check residue (an unrelated check, employee-auto-messages-settings-crud, had left Priya with persistent auto-welcome-messages that legitimately fire on every new conversation) - tightened that check's assertion to match only the default-message text itself rather than all chat bubbles; it now passes reliably. No regressions found. 2 pre-existing, unrelated backend test failures noted (not part of this iteration's criteria).",
+  "passed": 11,
+  "failed": 0,
+  "bugs": [],
+  "action_items": [
+    {
+      "type": "note",
+      "severity": "low",
+      "detail": "Pre-existing backend test failures tests/test_core.py::test_existing_phone_requires_verification (httpx.ReadTimeout) and tests/test_core.py::test_admin_reset_and_delete_employee_keeps_data (StopIteration: neha@talksme.in not found) - predate and are unrelated to this iteration's reviewed criteria (quick-payment reference fix + regression sweep); flagged for awareness only, not retested further."
+    },
+    {
+      "type": "note",
+      "severity": "low",
+      "detail": "Browser check default-message-prefill-and-auto-send had a false failure caused by cross-check state residue: employee-auto-messages-settings-crud leaves persistent custom auto-welcome-messages configured on agent@talksme.in/Priya (by design, its own tscheck-prefixed fixture), which legitimately fire on every new conversation this check creates. Tightened the check's 'not sent yet' assertion to filter on the specific default-message text instead of blanket chat-message count; re-ran twice and now passes deterministically. Not an application bug."
+    }
+  ],
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Quick Payment reference bug fixed (API)",
+      "name": "test_tscheck_quick_payment_reference_bug.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Rewrote test file to assert the FIX: POST /api/deposits with reference='-' (Rahul, amount 1500) -> 200, reference auto-generated as 'MANUAL-XXXXXXXX'; immediately repeating with reference='-' (amount 700) -> also 200 with a DIFFERENT MANUAL-XXXXXXXX reference; both deposit ids present in GET /api/deposits. Empty-string reference behaves identically (200, MANUAL- prefix). Explicit non-empty duplicate reference still correctly 409s with 'reference' in detail. 4/4 assertions across 2 test functions passed."
+    },
+    {
+      "criterion": "Quick Payment reference bug fixed (browser)",
+      "name": "employee-avatar-and-quick-payment",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "agent@talksme.in on Rahul's conversation (57242d0d-e60a-4eba-a3b9-ba836c762a57): avatar upload/crop/save passed as before. Quick Payment amount=1500 -> POST /api/deposits 200 {reference:'MANUAL-6FD5AE95',...}, success toast '₹1,500 recorded for Rahul Verma' shown. Immediately amount=700 -> POST /api/deposits 200 {reference:'MANUAL-EE7127A1',...} (different reference, no 409), success toast '₹700 recorded for Rahul Verma' shown. /employee/deposits shows both the 1,500 and 700 rows for Rahul."
+    },
+    {
+      "criterion": "No regressions: stale seats fix",
+      "name": "sa-org-control-search-bulk-reset-link",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check unchanged: search by admin email, bulk-select orgs, bulk seats action applies without reload; reset-link dialog, danger-zone, wrong-password toast all rendered correctly."
+    },
+    {
+      "criterion": "No regressions: landing types/delete",
+      "name": "admin-landing-pages-types-and-delete",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check unchanged: two type buttons present, fresh tscheck-landing page created/deleted, public /p/talksme/sales service-card selection enables Chat Now."
+    },
+    {
+      "criterion": "No regressions: default message prefill/auto-send",
+      "name": "default-message-prefill-and-auto-send",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Initial 2 reruns failed (chat-message count 0 expected, got 4) due to unrelated residue from employee-auto-messages-settings-crud (Priya's persistent custom welcome auto-messages firing on new conversations) - confirmed via GET /api/conversations/<id>/messages showing sender_role=employee/system auto-messages, not a customer send. Tightened assertion to check only the specific default-message text is absent pre-send; reran and passed: prefill shown, not auto-sent until auto_send_default enabled, then sent exactly once and stable across revisit/reload."
+    },
+    {
+      "criterion": "No regressions: default message prefill/auto-send (API)",
+      "name": "test_tscheck_default_message_autosend.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Re-ran unchanged: prefill without auto-send returns text but no stored customer message; with auto_send_default=true the message is stored once and repeat /start calls remain idempotent (1 matching message). 2/2 passed."
+    },
+    {
+      "criterion": "No regressions: platform support + SA inbox",
+      "name": "platform-support-and-sa-inbox",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check unchanged: customer support message visible to superadmin at /superadmin/support, reply delivered back with role-based 'TalksMe Support' sender name."
+    },
+    {
+      "criterion": "No regressions: admin notifications",
+      "name": "admin-notifications-send",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check unchanged: notify-send produces an immediate notify-history-row with honest 'No device' status."
+    },
+    {
+      "criterion": "No regressions: admin notifications (API)",
+      "name": "test_tscheck_admin_notifications.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "Re-ran unchanged: valid notification 200 + appears in history; malicious url 422; cross-org 404; non-admin role 401/403. 3/3 passed."
+    },
+    {
+      "criterion": "No regressions: chat links/branding/delete-for-self",
+      "name": "chat-links-branding-delete-for-self",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check unchanged: plain URL auto-links with safe target/rel, javascript: URL not linkified, powered-by-talksme links to talksme.in, customer delete-for-self hides message from customer view while employee still sees a deleted-by-customer marker."
+    },
+    {
+      "criterion": "Ingress sanity check (public preview URL)",
+      "name": "guest-chat-no-login-from-landing",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Ran against https://crm-demo-hub.preview.emergentagent.com: guest lands directly in chat with no login, backup-phone-share card visible, reopening the same guest session returns to the same conversation."
+    }
+  ]
+}

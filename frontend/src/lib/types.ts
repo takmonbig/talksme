@@ -32,7 +32,7 @@ export interface Conversation {
 }
 export interface Message {
   id: string; conversation_id: string; sender_role: string; sender_id: string | null; sender_name: string; text: string;
-  attachment: Attachment | null; reply_to: string | null; reply_preview: string; status: string; kind?: string; created_at: string;
+  attachment: Attachment | null; reply_to: string | null; reply_preview: string; status: string; kind?: string; deleted_by_customer?: boolean; created_at: string;
   pending?: boolean; failed?: boolean; idempotency_key?: string;
 }
 export interface Call { id: string; conversation_id: string; initiated_by: string; status: string; duration: number; at: string }
@@ -53,16 +53,17 @@ export interface DepositEvent {
 }
 
 export type Routing = "fixed" | "round_robin" | "least_busy" | "manual" | "team";
-export interface LPImage { id: string; url: string; label: string; employee_id: string | null }
+export interface LPImage { id: string; url: string; label: string; description: string; default_message: string; employee_id: string | null }
 export interface LandingPageInput {
   title: string; slug: string; template: "A" | "B"; description: string; cta_text: string; primary_color: string; font: string;
   logo_url: string; banner_url: string; trust_items: string[]; routing: Routing; assigned_employee_ids: string[]; images: LPImage[];
   calls_enabled: boolean; pixel_id: string; published: boolean; available_24_7: boolean;
+  default_message: string; auto_send_default: boolean; employee_can_edit_message: boolean;
 }
-export interface LandingPage extends LandingPageInput { id: string; org_id: string; views: number; leads: number; created_at: string }
+export interface LandingPage extends LandingPageInput { id: string; org_id: string; views: number; leads: number; archived: boolean; created_at: string }
 export interface PublicEmployee { id: string; name: string; avatar: string; title: string; status: string; verified: boolean }
 export interface PublicLanding { page: LandingPage; org: Organization; employees: PublicEmployee[] }
-export interface StartChatOut { status: "ok" | "verification_required"; conversation_id: string | null; challenge_id: string | null; mock_code: string | null }
+export interface StartChatOut { status: "ok" | "verification_required"; conversation_id: string | null; challenge_id: string | null; mock_code: string | null; prefill: string }
 
 export interface Broadcast {
   id: string; org_id: string; title: string; message: string; segment: string; scheduled_at: string | null; status: string;
@@ -102,3 +103,11 @@ export interface SASearchHit { kind: "message" | "phone"; message_id: string | n
 // Employee auto messages (mirrors AutoMsg / AutoMessages)
 export interface AutoMsg { id: string; text: string; enabled: boolean }
 export interface AutoMessages { enabled: boolean; welcome: AutoMsg[]; return_enabled: boolean; return_text: string }
+
+// Super Admin control center / platform support / admin notifications (mirror backend/models/schemas.py)
+export interface JobOut { id: string; kind: string; status: string; org_id: string; result: Record<string, unknown>; created_at: string; finished_at: string }
+export interface OrgResetPreview { org_id: string; org_name: string; will_reset: Record<string, number>; preserved: string[] }
+export interface SALandingRow extends LandingPage { org_name: string; org_slug: string; domain: string; employee_names: string[]; conversions: number; deleted: boolean }
+export interface SupportIdentity { display_name: string; avatar: string }
+export interface SACustomerPick { user_id: string; name: string; phone: string; orgs: string[]; opted_in: boolean }
+export interface NotificationRecord { id: string; org_id: string; customer_id: string; customer_name: string; title: string; body: string; url: string; status: string; devices: number; delivered: number; sent_by: string; created_at: string }

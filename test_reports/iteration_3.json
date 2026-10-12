@@ -1,0 +1,99 @@
+{
+  "iteration": 3,
+  "summary": "Retest mode. Re-ran prior backend suite (43 passed, 1 pre-existing unrelated failure) and 3 handed-back browser checks (all passed, confirming the stale-seats fix holds). Extended coverage for the 7-item acceptance_matrix with 5 new browser checks + 3 new backend test files (8 new artifacts). 6 of 7 criteria pass end-to-end. 1 criterion (employee avatar + quick payment) is a mixed result: avatar upload/crop/save passes, but Quick Payment is a confirmed BUG - it hardcodes deposit reference='-' while the backend enforces org-wide reference uniqueness, so the feature 409s for every use after the very first one in an org (already broken for org-talksme today).",
+  "passed": 15,
+  "failed": 3,
+  "bugs": [
+    {
+      "severity": "high",
+      "criterion": "Employee avatar + quick payment",
+      "detail": "QuickPayment form (components/crm/QuickPayment.tsx) always POSTs /api/deposits with reference: \"-\" (no UI field to change it). routers/crm.py enforces deposit reference uniqueness per org_id, not per customer/transaction. Org-talksme's reference \"-\" is already taken (from real prior usage), so every Quick Payment attempt now returns 409 'A deposit with this transaction reference already exists' - the feature is permanently broken for this org until a developer fixes the reference generation (e.g. a random/timestamped default instead of a constant).",
+      "evidence": "Browser check employee-avatar-and-quick-payment: clicking qp-save with amount 1500 on Rahul's conversation triggers POST /api/deposits -> 409 {\"detail\":\"A deposit with this transaction reference already exists\"}; no success toast, no deposit-row created. Confirmed independently via curl: POST /api/deposits with reference='-' -> 409 (same detail). Backend test test_tscheck_quick_payment_reference_bug.py::test_quick_payment_default_reference_is_rejected_after_first_use reproduces this directly against the running API (2/2 in that file passed, both asserting the bug's exact behavior)."
+    }
+  ],
+  "action_items": [
+    {
+      "type": "bug_fix_needed",
+      "severity": "high",
+      "detail": "Fix QuickPayment's hardcoded reference='-' (generate a unique reference per submission, e.g. uuid or timestamp) so Quick Payment stops permanently 409ing after its first org-wide use. See bugs[] entry and test_tscheck_quick_payment_reference_bug.py."
+    },
+    {
+      "type": "note",
+      "severity": "low",
+      "detail": "Pre-existing backend test tests/test_core.py::test_admin_reset_and_delete_employee_keeps_data fails (StopIteration: neha@talksme.in not present in GET /api/employees for org-talksme). Predates and is unrelated to this iteration's 7 reviewed criteria; not modified, flagged for awareness only."
+    }
+  ],
+  "retest_needed": true,
+  "checks": [
+    {
+      "criterion": "Re-verify stale seats fix",
+      "name": "sa-org-control-search-bulk-reset-link",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: search by admin email, bulk-select orgs, bulk seats action applies and the per-row org-seats-input shows the new value without reload (fix holds); reset-link dialog, danger-zone, and wrong-password toast all rendered correctly."
+    },
+    {
+      "criterion": "Admin landing pages types/delete (finish check)",
+      "name": "admin-landing-pages-types-and-delete",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Re-ran persisted check: exactly two type buttons (builder-template-A = 'Type B · Choose service', builder-template-B = 'Type A · Chat Now'); created a fresh tscheck-landing-<suffix> Type-A/Chat-Now page, landing-delete-button removed it; /p/talksme/sales shows lp-service-card items with lp-start-chat-button disabled until a card is selected, then enabled."
+    },
+    {
+      "criterion": "Default message prefill / auto-send without duplicates",
+      "name": "default-message-prefill-and-auto-send",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Created published template-B page tscheck-dm-<ts> assigned to Priya with default_message set, auto_send_default off. Fresh visitor Chat Now -> chat-message-input prefilled with the exact text, 0 chat-message bubbles (not sent). Enabled auto_send_default via edit; a new fresh visitor's Chat Now produced exactly 1 chat-message containing the text; revisiting the landing page + Chat Now again and reloading the chat kept it at exactly 1 (idempotent). Test page deleted at the end."
+    },
+    {
+      "criterion": "Default message prefill / auto-send without duplicates (API)",
+      "name": "test_tscheck_default_message_autosend.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /public/landing/talksme/<slug>/start (auto_send_default=false) -> 200, prefill == default_message text, GET conversation messages shows no customer message. With auto_send_default=true: first /start -> prefill=='' and the message IS stored as a customer message; repeat /start on the same guest session returns the same conversation_id and GET messages still shows exactly 1 matching customer message (idempotency_key dedup). 2/2 passed."
+    },
+    {
+      "criterion": "Platform support + SA support inbox",
+      "name": "platform-support-and-sa-inbox",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Fresh context '/' -> home-support-button opened /chat/<id>; customer sent 'tscheck support hello <ts>'. superadmin@talksme.in at /superadmin/support saw the matching sa-support-item, opened it, and replied. Customer saw the reply bubble; GET /api/conversations/<cid>/messages (as customer) confirmed the reply's sender_name starts with 'TalksMe Support' (role-based display name, routers/chat.py sender_display)."
+    },
+    {
+      "criterion": "Admin notifications",
+      "name": "admin-notifications-send",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "admin@talksme.in at /admin/notifications: selected Rahul Verma, filled title/body, clicked notify-send -> notify-history-row appeared immediately showing status 'No device' / 'No device with notifications on' (honest status, expected headless per spec_deviations)."
+    },
+    {
+      "criterion": "Admin notifications (API)",
+      "name": "test_tscheck_admin_notifications.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/admin/notifications for Rahul -> 200, status in allowed set, appears in GET /api/admin/notifications history. Bad url 'javascript:alert(1)' -> 422. Cross-org admin (aurora.demo) targeting a talksme customer -> 404. Employee role POST -> 401/403. 3/3 passed."
+    },
+    {
+      "criterion": "Employee avatar + quick payment",
+      "name": "employee-avatar-and-quick-payment",
+      "lane": "browser",
+      "status": "failed",
+      "evidence": "Avatar upload/crop/save all passed (avatar-file-input -> avatar-crop-dialog -> avatar-crop-save -> settings-save-profile toast). Quick Payment step failed: clicking qp-save (amount 1500) on Rahul's conversation returned HTTP 409 on POST /api/deposits ('A deposit with this transaction reference already exists'); no success toast, deposit never appears in /employee/deposits. See bugs[]."
+    },
+    {
+      "criterion": "Employee avatar + quick payment (API, bug reproduction)",
+      "name": "test_tscheck_quick_payment_reference_bug.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/deposits with the exact payload QuickPayment sends (reference='-') -> 409 'A deposit with this transaction reference already exists' (reproduces the bug directly against the API, 'passed' because the test's own assertion about the bug's behavior held). Control case: a freshly-unique reference succeeds (200), then repeating that SAME reference also 409s - confirming root cause is org-wide reference uniqueness colliding with QuickPayment's hardcoded constant. 2/2 passed."
+    },
+    {
+      "criterion": "Chat links + branding + delete-for-self",
+      "name": "chat-links-branding-delete-for-self",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "On seed conversation (new tscheck-prefixed messages only, no seeded rows touched): 'tscheck see https://example.com/page, thanks' rendered chat-link href='https://example.com/page' (trailing comma excluded), target='_blank', rel containing 'noopener'. 'javascript:alert(1)' message rendered with 0 chat-link elements. powered-by-talksme href=='https://talksme.in'. Customer's chat-delete-action on their own fresh message removed it from their own view (chat-message count 0 for that text); employee's inbox still shows that message with chat-deleted-by-customer marker visible."
+    }
+  ]
+}

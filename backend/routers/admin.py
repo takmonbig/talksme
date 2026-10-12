@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from lib.auth import PUBLIC_USER, hash_pw, require
 from lib.db import db
+from lib.push import push_bg
 from lib.util import audit, new_id, now_iso
 from routers.crm import need_feature
 from models.schemas import (AuditLog, Billing, BillingChangeIn, Broadcast, BroadcastIn, EmployeeIn, EmployeePatch, ProofIn, ResetPwIn,
@@ -51,6 +52,8 @@ async def patch_employee(eid: str, body: EmployeePatch, user: dict = Depends(adm
         upd["status"] = "offline"  # data is retained; only access is revoked
     await db.users.update_one({"id": eid}, {"$set": upd})
     await audit(user, "employee.updated", f"user:{eid} {sorted(upd)}", user["org_id"])
+    if upd.get("active") is True and not emp["active"]:
+        push_bg({eid}, {"title": "Your account is active again", "body": "You can sign in and receive customer chats.", "url": "/employee", "tag": "account"}, only_if_not_visible=False)
     return User(**{**emp, **upd})
 
 
@@ -93,7 +96,7 @@ async def delete_employee(eid: str, user: dict = Depends(admin)):
 # ---------- landing pages ----------
 @router.get("/landing-pages", response_model=list[LandingPage])
 async def list_lps(user: dict = Depends(admin)):
-    return await db.landing_pages.find({"org_id": user["org_id"]}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    return await db.landing_pages.find({"org_id": user["org_id"], "deleted": {"$ne": True}}, {"_id": 0}).sort("created_at", 1).to_list(200)
 
 
 async def _validate_lp(user: dict, body: LandingPageIn, lp_id: str | None) -> None:

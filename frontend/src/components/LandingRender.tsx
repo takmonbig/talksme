@@ -15,6 +15,7 @@ export function LandingRender({ page, orgName, employees, onChat, mobile }: {
   page: LandingPageInput; orgName: string; employees: PublicEmployee[]; onChat: (employeeId?: string, imageId?: string) => void; mobile?: boolean;
 }) {
   const [slide, setSlide] = useState(0);
+  const [picked, setPicked] = useState<string | null>(null);
   const slides = [page.banner_url, ...page.images.map((i) => i.url)].filter(Boolean);
   useEffect(() => {
     if (slides.length < 2) return;
@@ -83,32 +84,34 @@ export function LandingRender({ page, orgName, employees, onChat, mobile }: {
         <div className="absolute bottom-3 right-4 flex gap-1">{slides.map((_, i) => <span key={i} className={cn("h-1.5 rounded-full bg-white transition-[width] duration-300", i === slide ? "w-5" : "w-1.5 opacity-60")} />)}</div>
       </div>
       <div className="px-5 py-6">
-        <p className="mb-3 text-sm font-semibold text-slate-600">Choose who you'd like to talk to</p>
-        <div className={cn("grid gap-3", mobile ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4")}>
+        <p className="mb-3 text-sm font-semibold text-slate-600">Choose a service</p>
+        <div className={cn("grid gap-3", mobile ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3")} role="radiogroup" aria-label="Services">
           {page.images.map((img) => {
             const e = img.employee_id ? empById[img.employee_id] : undefined;
+            const on = picked === img.id;
             return (
-              <button key={img.id} onClick={() => onChat(img.employee_id ?? undefined, img.id)} data-testid="lp-associate-card"
-                className="group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-lg">
-                <div className="relative aspect-square overflow-hidden"><img src={img.url} alt={img.label} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                  {e && <span className={cn("absolute right-2 top-2 h-3 w-3 rounded-full border-2 border-white", e.status === "online" ? "bg-emerald-500" : "bg-slate-400")} />}
+              <button key={img.id} role="radio" aria-checked={on} onClick={() => setPicked(img.id)} data-testid="lp-service-card"
+                className={cn("group flex items-stretch gap-3 overflow-hidden rounded-2xl border-2 bg-white p-2 text-left shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-lg", on ? "shadow-lg" : "border-transparent")}
+                style={on ? { borderColor: c } : undefined}>
+                <img src={img.url} alt={img.label} className="h-20 w-20 shrink-0 rounded-xl object-cover" />
+                <div className="min-w-0 flex-1 py-1">
+                  <p className="text-sm font-bold text-slate-900">{img.label}</p>
+                  {img.description && <p className="mt-0.5 line-clamp-2 text-xs text-slate-600">{img.description}</p>}
+                  {e && <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">{e.verified && <BadgeCheck className="h-3 w-3" style={{ color: c }} />}{e.name} · <span className={e.status === "online" ? "text-emerald-600" : ""}>{e.status}</span></p>}
                 </div>
-                <div className="p-3">
-                  <p className="truncate text-sm font-semibold">{img.label}</p>
-                  <p className="flex items-center gap-1 truncate text-[11px] text-slate-500">{e?.verified && <BadgeCheck className="h-3 w-3" style={{ color: c }} />}{e?.title ?? "Team"}</p>
-                </div>
+                <span className={cn("m-1 mt-2 h-5 w-5 shrink-0 rounded-full border-2", on ? "border-[6px]" : "border-slate-300")} style={on ? { borderColor: c } : undefined} />
               </button>
             );
           })}
-          {page.images.length === 0 && employees.slice(0, 4).map((e) => (
-            <button key={e.id} onClick={() => onChat(e.id)} className="flex flex-col items-center gap-2 rounded-2xl border bg-white p-4 shadow-sm" data-testid="lp-associate-card"><Avatar name={e.name} src={e.avatar} size={56} /><span className="text-sm font-semibold">{e.name}</span></button>
-          ))}
         </div>
+        <button disabled={!picked} onClick={() => { const img = page.images.find((i) => i.id === picked); if (img) onChat(img.employee_id ?? undefined, img.id); }}
+          className="sticky bottom-3 mt-4 w-full rounded-2xl py-4 text-base font-bold text-white shadow-xl transition-[opacity,transform] duration-150 active:scale-[0.98] disabled:opacity-50" style={{ background: c }} data-testid="lp-start-chat-button">
+          {picked ? `${page.cta_text || "Start Chat"}: ${page.images.find((i) => i.id === picked)?.label ?? ""}` : "Select a service to start chat"}
+        </button>
       </div>
       <div className="space-y-5 px-5 pb-10">
         {trust}
         <div className="flex items-start gap-2 rounded-2xl bg-slate-900 p-4 text-sm text-slate-200"><Clock className="mt-0.5 h-4 w-4 shrink-0" />Chats are private between you and {orgName}. We never ask for passwords or card PINs in chat.</div>
-        {cta}
       </div>
     </div>
   );

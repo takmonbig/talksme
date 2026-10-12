@@ -128,6 +128,8 @@ hub = Hub()
 async def audience(c: dict) -> set[str]:
     """Everyone allowed to see a conversation: the customer, the assigned employee (or org queue) and org admins."""
     ids = {c["customer_user_id"]}
+    if c["org_id"] == "org-platform":
+        ids |= {u["id"] async for u in db.users.find({"role": "superadmin"}, {"id": 1})}
     q = {"org_id": c["org_id"], "role": "admin"} if c.get("employee_id") else {"org_id": c["org_id"], "role": {"$in": ["admin", "employee"]}}
     ids |= {u["id"] async for u in db.users.find(q, {"id": 1})}
     if c.get("employee_id"):

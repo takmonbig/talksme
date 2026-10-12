@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PixelTester } from "@/components/PixelTester";
 import { extractPixelId } from "@/lib/pixel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -210,6 +211,7 @@ const EMPTY_LP: LandingPageInput = {
   primary_color: "#0284C7", font: "Inter", logo_url: "", banner_url: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1400&q=70",
   trust_items: ["Verified team members", "Secure, encrypted chat", "Replies in under 5 minutes"], routing: "round_robin", assigned_employee_ids: [], images: [],
   calls_enabled: true, pixel_id: "", published: false, available_24_7: false,
+  default_message: "Hello! I am interested in your service. Please share more details.", auto_send_default: false, employee_can_edit_message: false,
 };
 
 function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: string | null; org: Organization; onDone: () => void }) {
@@ -227,7 +229,7 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
   if (f.title.trim().length < 2) errors.push("Title is required");
   if (!/^[a-z0-9-]{2,60}$/.test(f.slug)) errors.push("Path: lowercase letters, numbers and dashes");
   if (f.pixel_id && !/^\d{6,20}$/.test(f.pixel_id)) errors.push("Pixel ID must be 6–20 digits");
-  if (f.template === "A" && f.images.length === 0) errors.push("Template A needs at least one selectable image");
+  if (f.template === "A" && f.images.length === 0) errors.push("Add at least one service card");
   const empList = emps.data ?? [];
   const pubEmps = empList.map((e) => ({ id: e.id, name: e.name, avatar: e.avatar, title: e.title, status: e.status, verified: e.verified }));
   return (
@@ -243,7 +245,7 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
             <div className="grid grid-cols-2 gap-2">
               {(["A", "B"] as const).map((t) => (
                 <button key={t} onClick={() => set("template", t)} data-testid={`builder-template-${t}`} className={cn("rounded-xl border p-3 text-left text-sm transition-colors", f.template === t && "border-primary bg-accent")}>
-                  <b>Template {t}</b><p className="text-xs text-muted-foreground">{t === "A" ? "Image selection" : "Direct chat"}</p>
+                  <b>{t === "B" ? "Type A · Chat Now" : "Type B · Choose service"}</b><p className="text-xs text-muted-foreground">{t === "B" ? "Logo, highlights, banner, one big Chat Now button" : "Service cards (image, name, description), then Start Chat"}</p>
                 </button>
               ))}
             </div>
@@ -258,6 +260,13 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
               ))}
               {f.trust_items.length < 6 && <Button size="sm" variant="outline" onClick={() => set("trust_items", [...f.trust_items, "New highlight"])} data-testid="builder-add-trust"><Plus className="h-3.5 w-3.5" /> Add indicator</Button>}
             </div>
+            <div className="space-y-1 rounded-xl border p-3" data-testid="builder-default-message">
+              <Label>Default customer message</Label>
+              <Textarea value={f.default_message} onChange={(e) => set("default_message", e.target.value)} rows={2} maxLength={500} data-testid="builder-default-message-input" />
+              <p className="text-[11px] text-muted-foreground">Prefilled in the customer's message box. They can edit it and send it.</p>
+              <label className="flex items-center gap-2 text-sm"><Checkbox checked={f.auto_send_default} onCheckedChange={(v) => set("auto_send_default", !!v)} data-testid="builder-auto-send-checkbox" /> Send it automatically (once, as the customer)</label>
+              <label className="flex items-center gap-2 text-sm"><Checkbox checked={f.employee_can_edit_message} onCheckedChange={(v) => set("employee_can_edit_message", !!v)} data-testid="builder-employee-edit-checkbox" /> Assigned employees may edit this message</label>
+            </div>
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={f.available_24_7} onCheckedChange={(v) => set("available_24_7", !!v)} data-testid="builder-247-checkbox" /> Show "Available 24/7" (only if accurate)</label>
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={f.published} onCheckedChange={(v) => set("published", !!v)} data-testid="builder-published-checkbox" /> Published</label>
           </TabsContent>
@@ -270,28 +279,33 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
             <div className="space-y-1"><Label>Banner image URL</Label><ImageInput value={f.banner_url} onChange={(v) => set("banner_url", v)} testid="builder-banner" /></div>
             {f.template === "A" && (
               <div className="space-y-2">
-                <Label>Selectable images → employee</Label>
+                <Label>Service cards (image, name, description, employee)</Label>
                 {f.images.map((img, i) => (
                   <div key={img.id} className="flex items-center gap-2 rounded-xl border p-2" data-testid="builder-image-row">
                     <img src={img.url} alt="" className="h-10 w-10 rounded-lg object-cover" />
                     <div className="min-w-0 flex-1 space-y-1">
-                      <Input className="h-7" value={img.label} onChange={(e) => set("images", f.images.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
+                      <Input className="h-7" value={img.label} placeholder="Service name" onChange={(e) => set("images", f.images.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} data-testid="builder-service-name" />
+                      <Input className="h-7" value={img.description} placeholder="Short description" onChange={(e) => set("images", f.images.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} data-testid="builder-service-description" />
+                      <Input className="h-7" value={img.default_message} placeholder="Default message for this service (optional)" onChange={(e) => set("images", f.images.map((x, j) => (j === i ? { ...x, default_message: e.target.value } : x)))} data-testid="builder-service-message" />
                       <Select value={img.employee_id ?? ""} onValueChange={(v: string) => set("images", f.images.map((x, j) => (j === i ? { ...x, employee_id: v } : x)))}>
                         <SelectTrigger size="sm" className="w-full" data-testid="builder-image-employee-select"><SelectValue>{(v) => empList.find((e) => e.id === v)?.name ?? "Map to employee"}</SelectValue></SelectTrigger>
                         <SelectContent>{empList.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
-                    <Button variant="ghost" size="icon-sm" onClick={() => set("images", f.images.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>
+                    <div className="flex flex-col">
+                      <Button variant="ghost" size="icon-sm" disabled={i === 0} onClick={() => set("images", f.images.map((x, j, a) => (j === i - 1 ? a[i] : j === i ? a[i - 1] : x)))} aria-label="Move up" data-testid="builder-service-up">↑</Button>
+                      <Button variant="ghost" size="icon-sm" onClick={() => set("images", f.images.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
                   </div>
                 ))}
                 <div className="flex flex-wrap gap-1">
                   {empList.filter((e) => !f.images.some((i) => i.employee_id === e.id)).map((e) => (
-                    <Button key={e.id} size="xs" variant="outline" onClick={() => set("images", [...f.images, { id: uid(), url: e.avatar || "https://i.pravatar.cc/300", label: e.name, employee_id: e.id }])} data-testid="builder-add-image">+ {e.name}</Button>
+                    <Button key={e.id} size="xs" variant="outline" onClick={() => set("images", [...f.images, { id: uid(), url: e.avatar || "https://i.pravatar.cc/300", label: e.name, description: "", default_message: "", employee_id: e.id }])} data-testid="builder-add-image">+ {e.name}</Button>
                   ))}
                 </div>
                 <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted" data-testid="builder-upload-image">
                   <Plus className="h-3 w-3" /> Upload custom image
-                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; e.target.value = ""; if (!file) return; try { const a = await uploadFile(file); set("images", [...f.images, { id: uid(), url: a.url, label: "Team member", employee_id: null }]); toast.success("Image uploaded — map it to an employee"); } catch (err) { toast.error((err as Error).message); } }} />
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; e.target.value = ""; if (!file) return; try { const a = await uploadFile(file); set("images", [...f.images, { id: uid(), url: a.url, label: "New service", description: "", default_message: "", employee_id: null }]); toast.success("Image uploaded — map it to an employee"); } catch (err) { toast.error((err as Error).message); } }} />
                 </label>
               </div>
             )}
@@ -318,8 +332,8 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
           <TabsContent value="pixel" className="space-y-3 pt-3">
             <div className="space-y-1"><Label>Meta Pixel ID</Label><Input value={f.pixel_id} onChange={(e) => set("pixel_id", extractPixelId(e.target.value))} placeholder="Paste Pixel ID or the full Meta Pixel code" data-testid="builder-pixel-input" />
               <p className="text-[11px] text-muted-foreground">{f.pixel_id ? <>Live: PageView fires on every visit, and Lead + Contact fire when a visitor taps Chat. Check it in Meta Events Manager, then <b>Test events</b>.</> : "You can paste the whole Meta Pixel code; we keep just the ID."}</p></div>
-            <p className="text-xs text-muted-foreground">Fires PageView, Lead and Contact once per visit, only after visitor consent. Phone numbers, chat content and payment details are never sent.</p>
-            <MockBadge label="Meta Pixel mocked · events logged to console" />
+            <p className="text-xs text-muted-foreground">PageView, Lead and Contact each fire once per page visit. Phone numbers, chat content and payment details are never sent.</p>
+            <PixelTester pixelId={f.pixel_id} />
           </TabsContent>
         </Tabs>
       </div>
@@ -344,6 +358,7 @@ export function AdminLandingPages() {
   const [editing, setEditing] = useState<{ id: string | null; data: LandingPageInput } | null>(null);
   const q = useQuery({ queryKey: ["landing-pages"], queryFn: () => apiGet<LandingPage[]>("/admin/landing-pages") });
   const org = useQuery({ queryKey: ["org"], queryFn: () => apiGet<Organization>("/org") });
+  const delLp = useMutation({ mutationFn: (id: string) => apiDelete(`/admin/landing-pages/${id}`), onSuccess: () => { toast.success("Landing page deleted"); qc.invalidateQueries({ queryKey: ["landing-pages"] }); }, onError: toastErr });
   const dup = useMutation({ mutationFn: (id: string) => apiPost<LandingPage>(`/admin/landing-pages/${id}/duplicate`), onSuccess: (p) => { toast.success(`Duplicated as /${p.slug}`); qc.invalidateQueries({ queryKey: ["landing-pages"] }); }, onError: toastErr });
   const toggle = useMutation({
     mutationFn: (p: LandingPage) => apiPut<LandingPage>(`/admin/landing-pages/${p.id}`, { ...p, published: !p.published }),
@@ -376,6 +391,7 @@ export function AdminLandingPages() {
               <div className="flex flex-wrap gap-1.5">
                 <Button size="sm" onClick={() => setEditing({ id: p.id, data: p })} data-testid="landing-edit-button">Edit</Button>
                 <Button size="sm" variant="outline" onClick={() => dup.mutate(p.id)} data-testid="landing-duplicate-button"><Copy className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="outline" className="text-destructive" onClick={() => window.confirm(`Delete "${p.title}"? Its conversations are kept.`) && delLp.mutate(p.id)} data-testid="landing-delete-button"><Trash2 className="h-3.5 w-3.5" /></Button>
                 <Button size="sm" variant="outline" onClick={() => toggle.mutate(p)} data-testid="landing-publish-toggle">{p.published ? "Unpublish" : "Publish"}</Button>
                 {p.published && org.data && <a href={`/p/${org.data.slug}/${p.slug}`} target="_blank" rel="noreferrer"><Button size="sm" variant="ghost" data-testid="landing-open-button"><ExternalLink className="h-3.5 w-3.5" /> Open</Button></a>}
               </div>

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { AvatarUploader } from "@/components/AvatarUploader";
+import { EmployeeDefaultMessages } from "@/components/EmployeeDefaultMessages";
 import { AutoMessagesCard } from "@/components/AutoMessagesCard";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -60,11 +62,12 @@ export function EmployeeSettings() {
           <div className="flex items-center gap-4"><Avatar name={u.name} src={avatar ?? u.avatar} size={64} status={u.status} /><div><p className="font-heading text-lg font-semibold">{u.name}</p><p className="text-sm text-muted-foreground">{u.title}</p>{u.verified ? <VerifiedBadge /> : <span className="text-xs text-muted-foreground">Verification pending admin approval</span>}</div></div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <div className="space-y-1"><Label>Display name</Label><Input value={name ?? u.name} onChange={(e) => setName(e.target.value)} data-testid="settings-name-input" /></div>
-            <div className="space-y-1"><Label>Avatar URL</Label><ImageInput value={avatar ?? u.avatar} onChange={(v) => setAvatar(v)} testid="settings-avatar" /></div>
+            <div className="space-y-1 sm:col-span-2"><Label>Profile picture</Label><AvatarUploader name={name ?? u.name} value={avatar ?? u.avatar} onChange={(v) => setAvatar(v)} /></div>
           </div>
           <Button className="mt-4" disabled={m.isPending || (name ?? u.name).trim().length < 2} onClick={() => m.mutate({ name: name ?? u.name, avatar: avatar ?? u.avatar })} data-testid="settings-save-profile">Save profile</Button>
         </div>
         <AutoMessagesCard />
+        <EmployeeDefaultMessages />
         <div className="space-y-4 rounded-2xl border bg-card p-5">
           <div className="flex items-center justify-between gap-3">
             <div><p className="font-semibold">Availability</p><p className="text-xs text-muted-foreground">Offline employees are skipped by round-robin and least-busy routing.</p></div>

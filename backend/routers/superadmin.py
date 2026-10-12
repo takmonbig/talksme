@@ -17,7 +17,7 @@ sa = require("superadmin")
 async def org_rows() -> list[dict]:
     plans = {p["id"]: p async for p in db.plans.find({}, {"_id": 0})}
     rows = []
-    async for o in db.organizations.find({}, {"_id": 0}).sort("created_at", 1):
+    async for o in db.organizations.find({"id": {"$ne": "org-platform"}}, {"_id": 0}).sort("created_at", 1):
         p = plans.get(o["plan_id"], {})
         mrr = 0 if o["status"] != "active" else (p.get("price_monthly", 0) if o.get("billing_cycle") == "monthly" else p.get("price_yearly", 0) / 12)
         rows.append({**o, "plan_name": p.get("name", "—"),

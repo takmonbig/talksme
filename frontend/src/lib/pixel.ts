@@ -34,7 +34,7 @@ export function initPixel(id: string) {
 
 /** Fire a standard event once per page load. eventID lets Meta de-duplicate with a future Conversions API. */
 export function trackPixel(id: string, event: "PageView" | "Lead" | "Contact" | string, params?: Record<string, string | number>) {
-  const key = `${id}:${event}`;
+  const key = `${id}:${event}:${location.pathname}`; // once per page; client-side navigation to another page tracks again
   if (!initPixel(id) || fired.has(key)) return;
   fired.add(key);
   const eventID = `${event}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -50,4 +50,19 @@ export function campaignParams(search: URLSearchParams): Record<string, string> 
     if (v) out[k] = v.slice(0, 100);
   }
   return out;
+}
+
+/** Admin Pixel Test: fire an event without de-duplication and report whether Meta's endpoint received it. */
+export async function testPixel(id: string, event: string): Promise<{ script: boolean; sent: boolean }> {
+  if (!initPixel(id)) return { script: false, sent: false };
+  const before = performance.getEntriesByType("resource").filter((e) => e.name.includes("facebook.com/tr")).length;
+  window.fbq!("trackSingle", id, event, { test: "talksme_pixel_test" }, { eventID: `test-${Date.now()}` });
+  for (let i = 0; i < 20; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    const script = !!document.querySelector('script[src*="connect.facebook.net"]') && typeof (window.fbq as unknown as { getState?: unknown })?.getState !== "undefined";
+    const sent = performance.getEntriesByType("resource").filter((e) => e.name.includes("facebook.com/tr")).length > before;
+    if (sent) return { script: true, sent };
+    if (i === 19) return { script, sent };
+  }
+  return { script: false, sent: false };
 }

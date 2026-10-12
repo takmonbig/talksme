@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { QuickPayment } from "@/components/crm/QuickPayment";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Ban, CalendarClock, History, Plus, Shuffle, StickyNote, Unlock, Wallet, Phone } from "lucide-react";
@@ -164,6 +165,7 @@ export function CustomerPanel({ customerId, conversationId, employeeId, canTrans
         {p.blocked && <span className="mt-2 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive" data-testid="customer-blocked-badge">Blocked</span>}
       </div>
 
+      <QuickPayment p={p} />
       <label className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 px-3 py-2.5" data-testid="customer-calls-allowed-row">
         <span className="min-w-0">
           <span className="flex items-center gap-1.5 text-sm font-medium"><Phone className="h-3.5 w-3.5 text-primary" /> Customer can call me</span>

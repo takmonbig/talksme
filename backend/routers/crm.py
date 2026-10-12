@@ -84,6 +84,10 @@ async def update_customer(pid: str, body: CustomerUpdate, user: dict = Depends(s
         await audit(user, "customer.blocked" if upd["blocked"] else "customer.unblocked", f"customer:{pid}", user["org_id"])
     if upd:
         await db.customer_profiles.update_one({"id": pid}, {"$set": upd})
+    conv_upd = {k2: upd[k] for k, k2 in (("name", "customer_name"), ("phone", "customer_phone")) if k in upd}
+    if conv_upd:  # org-scoped CRM record only; the customer's own identity/login is untouched
+        await db.conversations.update_many({"customer_id": pid}, {"$set": conv_upd})
+        await audit(user, "customer.details_updated", f"customer:{pid} {sorted(conv_upd)}", user["org_id"])
     return (await with_totals([await get_profile(user, pid)]))[0]
 
 
@@ -140,6 +144,8 @@ async def list_deposits(status: str = "", q: str = "", customer_id: str = "", us
 async def record_deposit(body: DepositIn, user: dict = Depends(staff)):
     p = await get_profile(user, body.customer_id)
     await need_feature(user, "deposits")
+    if body.reference.strip() in ("", "-"):  # quick payment without a transaction reference: generate a unique one
+        body.reference = f"MANUAL-{new_id()[:8].upper()}"
     if await db.deposits.find_one({"org_id": user["org_id"], "reference": body.reference}):
         raise HTTPException(409, "A deposit with this transaction reference already exists")
     emp_id = p.get("assigned_employee_id") if user["role"] == "admin" and p.get("assigned_employee_id") else user["id"]

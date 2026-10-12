@@ -20,6 +20,9 @@ import {
 } from "@/pages/SuperAdminPages";
 import { SuperCustomers } from "@/pages/SuperCustomers";
 import { SuperCompare, SuperSearch } from "@/pages/SuperAuditTools";
+import { SuperLandingPages, SuperSupport } from "@/pages/SuperControl";
+import { AdminNotifications } from "@/pages/AdminNotify";
+import ResetPassword from "@/pages/ResetPassword";
 
 function NotFound() {
   return (
@@ -46,6 +49,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/demo" element={<Login />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/p/:org/:slug" element={<PublicLanding />} />
       <Route path="/chat" element={<CustomerInbox />} />
       <Route path="/chat/:conversationId" element={<CustomerInbox />} />
@@ -66,6 +70,7 @@ export default function App() {
         <Route path="deposits" element={<AdminDeposits />} />
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="broadcasts" element={<AdminBroadcasts />} />
+        <Route path="notifications" element={<AdminNotifications />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="billing" element={<AdminBilling />} />
       </Route>
@@ -74,6 +79,8 @@ export default function App() {
         <Route path="organizations" element={<SuperOrganizations />} />
         <Route path="customers" element={<SuperCustomers />} />
         <Route path="search" element={<SuperSearch />} />
+        <Route path="landing-pages" element={<SuperLandingPages />} />
+        <Route path="support" element={<SuperSupport />} />
         <Route path="employee-compare" element={<SuperCompare />} />
         <Route path="admins" element={<SuperAdmins />} />
         <Route path="subscriptions" element={<SuperSubscriptions />} />

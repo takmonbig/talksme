@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from lib.auth import PUBLIC_USER, clear_session, current_user, set_session, verify_pw
 from lib.db import db
-from lib.seed_data import reset_demo
 from lib.util import audit
 from lib.auth import hash_pw
 from models.schemas import LoginIn, MeUpdate, Ok, PasswordIn, User
@@ -66,8 +65,5 @@ async def change_password(body: PasswordIn, user: dict = Depends(current_user)):
     return Ok(message="Password updated")
 
 
-@router.post("/demo/reset", response_model=Ok)
-async def demo_reset(response: Response, user: dict = Depends(current_user)):
-    await reset_demo()
-    clear_session(response)  # user ids are regenerated; sign in again
-    return Ok(message="Demo data reset. Please sign in again.")
+# NOTE: the old global "/demo/reset" endpoint was removed: it let any signed-in user wipe the whole platform.
+# Resets are now per-organization, Super Admin only, re-authenticated and audited (routers/platform.py).

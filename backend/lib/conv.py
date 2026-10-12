@@ -8,8 +8,13 @@ from lib.db import db
 from lib.util import iso, new_id, now, now_iso
 
 
+PLATFORM_ORG = "org-platform"  # TalksMe platform-support org; its inbox belongs to Super Admins
+
+
 def can_access(user: dict, c: dict) -> bool:
     r = user["role"]
+    if r == "superadmin":
+        return c["org_id"] == PLATFORM_ORG
     if r == "customer":
         return c["customer_user_id"] == user["id"]
     if r == "employee":
