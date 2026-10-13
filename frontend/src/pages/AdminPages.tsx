@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { PixelTester } from "@/components/PixelTester";
+import { EmployeeOnlineSwitch, EmployeeProfileEditor } from "@/components/EmployeeProfileEditor";
+import { PixelManager } from "@/components/PixelManager";
 import { extractPixelId } from "@/lib/pixel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -163,7 +164,7 @@ export function AdminEmployees() {
         <div className="border-b p-3"><Input value={t.q} onChange={(e) => t.setQ(e.target.value)} placeholder="Search employees" data-testid="employees-search-input" /></div>
         {q.isError ? <div className="p-4"><ErrorState onRetry={() => q.refetch()} /></div> : (
           <Table>
-            <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead className="hidden md:table-cell">Open / total</TableHead><TableHead className="text-right">Deposits</TableHead><TableHead className="hidden lg:table-cell">Target</TableHead><TableHead>Verified</TableHead><TableHead>Calls</TableHead><TableHead>Active</TableHead><TableHead /></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead className="hidden md:table-cell">Open / total</TableHead><TableHead className="text-right">Deposits</TableHead><TableHead className="hidden lg:table-cell">Target</TableHead><TableHead>Verified</TableHead><TableHead>Calls</TableHead><TableHead>Status / profile</TableHead><TableHead>Active</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody>
               {q.isLoading && <TableRow><TableCell colSpan={7}><Skeleton className="h-10" /></TableCell></TableRow>}
               {t.rows.map((e) => (
@@ -178,6 +179,7 @@ export function AdminEmployees() {
                   </TableCell>
                   <TableCell><Checkbox checked={e.verified} onCheckedChange={(v) => m.mutate({ id: e.id, b: { verified: !!v } })} data-testid="employee-verified-checkbox" /></TableCell>
                   <TableCell><Checkbox checked={e.calls_enabled} onCheckedChange={(v) => m.mutate({ id: e.id, b: { calls_enabled: !!v } })} data-testid="employee-calls-checkbox" /></TableCell>
+                  <TableCell><div className="flex flex-col gap-1"><EmployeeOnlineSwitch e={e} /><EmployeeProfileEditor e={e} /></div></TableCell>
                   <TableCell><Button size="xs" variant={e.active ? "outline" : "default"} onClick={() => m.mutate({ id: e.id, b: { active: !e.active } })} data-testid="employee-active-toggle">{e.active ? "Deactivate" : "Activate"}</Button></TableCell>
                   <TableCell><div className="flex gap-1">
                     <Button size="xs" variant="ghost" onClick={() => setDetail(e.id)} data-testid="employee-details-button">Details</Button>
@@ -210,7 +212,7 @@ const EMPTY_LP: LandingPageInput = {
   title: "New landing page", slug: "new-page", template: "B", description: "Talk to our team on chat — fast, friendly and secure.", cta_text: "Chat Now",
   primary_color: "#0284C7", font: "Inter", logo_url: "", banner_url: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1400&q=70",
   trust_items: ["Verified team members", "Secure, encrypted chat", "Replies in under 5 minutes"], routing: "round_robin", assigned_employee_ids: [], images: [],
-  calls_enabled: true, pixel_id: "", published: false, available_24_7: false,
+  calls_enabled: true, pixel_id: "", pixel_ids: [], published: false, available_24_7: false,
   default_message: "Hello! I am interested in your service. Please share more details.", auto_send_default: false, employee_can_edit_message: false,
 };
 
@@ -330,10 +332,7 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
             <label className="flex items-center gap-2 border-t pt-3 text-sm"><Checkbox checked={f.calls_enabled} onCheckedChange={(v) => set("calls_enabled", !!v)} data-testid="builder-calls-checkbox" /> Enable audio calling on this page</label>
           </TabsContent>
           <TabsContent value="pixel" className="space-y-3 pt-3">
-            <div className="space-y-1"><Label>Meta Pixel ID</Label><Input value={f.pixel_id} onChange={(e) => set("pixel_id", extractPixelId(e.target.value))} placeholder="Paste Pixel ID or the full Meta Pixel code" data-testid="builder-pixel-input" />
-              <p className="text-[11px] text-muted-foreground">{f.pixel_id ? <>Live: PageView fires on every visit, and Lead + Contact fire when a visitor taps Chat. Check it in Meta Events Manager, then <b>Test events</b>.</> : "You can paste the whole Meta Pixel code; we keep just the ID."}</p></div>
-            <p className="text-xs text-muted-foreground">PageView, Lead and Contact each fire once per page visit. Phone numbers, chat content and payment details are never sent.</p>
-            <PixelTester pixelId={f.pixel_id} />
+            <PixelManager ids={[...new Set([...(f.pixel_ids ?? []), f.pixel_id].filter(Boolean))]} onChange={(ids) => setF({ ...f, pixel_ids: ids, pixel_id: ids[0] ?? "" })} />
           </TabsContent>
         </Tabs>
       </div>

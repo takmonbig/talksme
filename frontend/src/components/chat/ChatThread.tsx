@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { Linkify } from "@/components/chat/Linkify";
+import { EmployeeProfileDialog } from "@/components/chat/EmployeeProfile";
 import { toast } from "sonner";
 import {
   ArrowLeft, Check, CheckCheck, Clock, CornerUpLeft, FileText, Image as ImageIcon, Mic, Paperclip, Search, SendHorizontal,
   Smile, Square, Trash2, Video, X, AlertCircle, Lock, Zap,
+  BadgeCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +53,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
   const key = ["messages", conv.id];
   const mine = viewer === "customer" ? "customer" : "employee";
   const loc = useLocation();
+  const [profile, setProfile] = useState(false);
   // Landing-page default message: prefilled once for a brand-new chat (customer can edit or send it).
   const [text, setText] = useState(() => (viewer === "customer" && (loc.state as { prefill?: string } | null)?.prefill) || "");
   const [reply, setReply] = useState<Message | null>(null);
@@ -138,13 +141,24 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="chat-thread">
-      <div className="flex h-16 shrink-0 items-center gap-3 border-b bg-card/80 px-3 backdrop-blur-xl">
+      <div className={cn("flex shrink-0 items-center gap-3 border-b bg-card/80 px-3 backdrop-blur-xl", viewer === "customer" && conv.employee_name ? "h-[76px]" : "h-16")}>
         {onBack && <Button variant="ghost" size="icon" onClick={onBack} data-testid="chat-back-button"><ArrowLeft className="h-4 w-4" /></Button>}
+        {viewer === "customer" && conv.employee_name ? (
+          <button className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left transition-colors duration-150 hover:bg-muted/60" onClick={() => setProfile(true)} data-testid="chat-employee-profile-trigger">
+            <Avatar name={conv.employee_name} src={conv.employee_avatar} size={54} status={conv.employee_status} />
+            <span className="min-w-0">
+              <span className="flex items-center gap-1 truncate text-lg font-bold leading-tight" data-testid="chat-header-title">{conv.employee_name}{conv.employee_verified && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />}</span>
+              <span className="block truncate text-xs font-medium text-muted-foreground" data-testid="chat-header-employee-details">{[conv.employee_title, conv.org_name].filter(Boolean).join(" · ")}</span>
+              <span className="block truncate text-[11px]" data-testid="chat-header-subtitle">{conv.typing || typingQ.data ? <span className="text-primary">typing…</span> : <span className={conv.employee_status === "online" ? "text-emerald-600" : "text-muted-foreground"}>{conv.employee_status === "online" ? "● Online" : conv.employee_status} · tap to view profile</span>}</span>
+            </span>
+          </button>
+        ) : (<>
         <Avatar name={title} src={avatar} size={38} status={status} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold" data-testid="chat-header-title">{title}</p>
           <p className="truncate text-xs text-muted-foreground" data-testid="chat-header-subtitle">{conv.typing || typingQ.data ? <span className="text-primary">typing…</span> : <>{subtitle} · <span className="inline-flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400" data-testid="chat-secure-label"><Lock className="h-3 w-3" />Private & secure</span></>}</p>
-        </div>
+        </div></>)}
+        {profile && <EmployeeProfileDialog conv={conv} onClose={() => setProfile(false)} />}
         {search !== null ? (
           <div className="flex items-center gap-1">
             <Input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search messages" className="h-8 w-36 sm:w-52" data-testid="chat-search-input" />
@@ -159,6 +173,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
       {viewer === "customer" && <InstallBanner />}
 
       <div className="relative min-h-0 flex-1">
+      <a href="https://talksme.in" target="_blank" rel="noopener noreferrer" className="pointer-events-auto absolute bottom-9 right-3 z-10 hidden max-w-[150px] rounded-2xl rounded-br-sm border bg-card/90 px-2 py-1 text-[10px] leading-tight text-muted-foreground shadow-sm backdrop-blur transition-colors duration-150 hover:text-foreground sm:block" data-testid="talksme-promo-cloud">☁️ Use <b className="text-primary">TalksMe</b> for your business</a>
       <a href="https://talksme.in" target="_blank" rel="noopener noreferrer" className="absolute bottom-2 right-3 z-10 rounded-full border bg-card/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" data-testid="powered-by-talksme">Powered by <b className="text-primary">TalksMe</b></a>
       <div className="chat-wall h-full overflow-y-auto px-3 pb-8 pt-4 sm:px-6" data-testid="chat-messages">
         {q.isLoading && <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className={cn("h-12 w-2/3", i % 2 && "ml-auto")} />)}</div>}

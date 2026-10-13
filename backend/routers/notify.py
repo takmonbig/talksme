@@ -15,7 +15,8 @@ from lib.auth import current_user, require
 from lib.conv import can_access
 from lib.db import db
 from lib.util import now_iso
-from models.schemas import AgoraJoinOut, BackupPhoneIn, IceServersOut, Ok, PushKeyOut, PushSubscriptionIn
+from lib.push import push_to
+from models.schemas import PushTestOut, AgoraJoinOut, BackupPhoneIn, IceServersOut, Ok, PushKeyOut, PushSubscriptionIn
 
 router = APIRouter()
 log = logging.getLogger("turn")
@@ -114,3 +115,12 @@ async def agora_join(cid: str, user: dict = Depends(current_user)):
     # Secured projects (App Certificate on) need a server-signed token; "App ID only" projects join with token=None.
     token = RtcTokenBuilder.buildTokenWithUid(app_id, cert, channel, uid, 1, int(time.time()) + 3600) if cert else None
     return AgoraJoinOut(app_id=app_id, channel=channel, uid=uid, token=token)
+
+
+@router.post("/push/test", response_model=PushTestOut)
+async def push_test(user: dict = Depends(current_user)):
+    """Sends a test notification to all of this user's devices: proves push works end to end."""
+    devices = await db.push_subscriptions.count_documents({"user_id": user["id"]})
+    delivered = await push_to({user["id"]}, {"title": "🔔 Notifications are working", "body": "You'll get new messages and calls here.",
+                                             "url": "/chat" if user["role"] == "customer" else "/employee/inbox", "tag": "push-test"}, only_if_not_visible=False) if devices else 0
+    return PushTestOut(devices=devices, delivered=delivered)

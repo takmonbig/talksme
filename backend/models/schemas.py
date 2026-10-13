@@ -5,6 +5,17 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
+
+def pixel_from(v: str) -> str:
+    """Admins may paste the Pixel ID or the whole Meta Pixel base code: return the numeric Pixel ID."""
+    v = v.strip()
+    if not v or v.isdigit():
+        return v
+    m = re.search(r"fbq\(\s*['\"]init['\"]\s*,\s*['\"](\d{6,20})", v) or re.search(r"[?&]id=(\d{6,20})", v) or re.search(r"\b(\d{15,16})\b", v)
+    if not m:
+        raise ValueError("Couldn't find a Meta Pixel ID. Paste the Pixel ID (15-16 digits) or the full Meta Pixel code.")
+    return m.group(1)
+
 class Base(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -20,6 +31,8 @@ class User(Base):
     title: str = ""
     phone: Optional[str] = ""
     backup_skipped: bool = False
+    bio: str = ""
+    profile_link: str = ""
     status: str = "offline"
     verified: bool = False
     active: bool = True
@@ -161,6 +174,10 @@ class Conversation(Base):
     employee_name: str = ""
     employee_avatar: str = ""
     employee_status: str = "offline"
+    employee_title: str = ""
+    employee_bio: str = ""
+    employee_link: str = ""
+    employee_verified: bool = False
     landing_page_id: Optional[str] = None
     landing_title: str = ""
     last_message: str = ""
@@ -340,6 +357,7 @@ class LandingPage(Base):
     images: list[LPImage] = []
     calls_enabled: bool = True
     pixel_id: str = ""
+    pixel_ids: list[str] = []
     published: bool = False
     available_24_7: bool = False
     default_message: str = ""
@@ -367,6 +385,7 @@ class LandingPageIn(BaseModel):
     images: list[LPImage] = []
     calls_enabled: bool = True
     pixel_id: str = Field("", pattern=r"^(\d{6,20})?$")
+    pixel_ids: list[str] = Field(default_factory=list, max_length=5)  # multiple Meta Pixels per page
     published: bool = False
     available_24_7: bool = False
     default_message: str = Field("", max_length=500)
@@ -376,16 +395,19 @@ class LandingPageIn(BaseModel):
     @field_validator("pixel_id", mode="before")
     @classmethod
     def _extract_pixel_id(cls, v: object) -> object:
-        """Admins may paste the whole Meta Pixel base code: pull the numeric Pixel ID out of it."""
-        if not isinstance(v, str):
+        return pixel_from(v) if isinstance(v, str) else v
+
+    @field_validator("pixel_ids", mode="before")
+    @classmethod
+    def _extract_pixel_ids(cls, v: object) -> object:
+        if not isinstance(v, list):
             return v
-        v = v.strip()
-        if not v or v.isdigit():
-            return v
-        m = re.search(r"fbq\(\s*['\"]init['\"]\s*,\s*['\"](\d{6,20})", v) or re.search(r"[?&]id=(\d{6,20})", v) or re.search(r"\b(\d{15,16})\b", v)
-        if not m:
-            raise ValueError("Couldn't find a Meta Pixel ID. Paste the Pixel ID (15-16 digits) or the full Meta Pixel code.")
-        return m.group(1)
+        out: list[str] = []
+        for x in v:
+            pid = pixel_from(x) if isinstance(x, str) else x
+            if pid and pid not in out:
+                out.append(pid)
+        return out
 
 
 class PublicEmployee(Base):
@@ -459,7 +481,10 @@ class EmployeeIn(BaseModel):
 
 class EmployeePatch(BaseModel):
     name: Optional[str] = Field(None, min_length=2)
-    title: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=60)
+    bio: Optional[str] = Field(None, max_length=300)
+    profile_link: Optional[str] = Field(None, pattern=r"^(https?://[^\s]{3,300})?$")
+    status: Optional[Literal["online", "away", "offline"]] = None  # Admin can set an employee online/offline
     active: Optional[bool] = None
     verified: Optional[bool] = None
     calls_enabled: Optional[bool] = None
@@ -840,3 +865,8 @@ class NotificationRecord(Base):
 
 class DefaultMessageIn(BaseModel):
     default_message: str = Field("", max_length=500)
+
+
+class PushTestOut(Base):
+    devices: int
+    delivered: int

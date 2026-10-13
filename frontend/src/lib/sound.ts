@@ -1,5 +1,7 @@
 /** Tiny WebAudio sound kit (no audio files): message "ding", looping ringtone for incoming calls, ringback for outgoing. */
 let ctx: AudioContext | null = null;
+/** Vibrate only after the user has interacted with the page (browsers block it otherwise). */
+const buzz = (p: number | number[]) => { if ((navigator as unknown as { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive !== false) navigator.vibrate?.(p); };
 const ac = () => {
   if (!ctx) {
     const C = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -35,7 +37,7 @@ function tone(freq: number, start: number, dur: number, vol = 0.18) {
 export function playMessageTone() {
   tone(880, 0, 0.18);
   tone(1320, 0.12, 0.25);
-  navigator.vibrate?.(120);
+  buzz(120);
 }
 
 let ringTimer: ReturnType<typeof setInterval> | null = null;
@@ -45,7 +47,7 @@ export function startRing(kind: "incoming" | "outgoing") {
   const ring = () => {
     if (kind === "incoming") {
       [0, 0.25, 0.5, 0.75].forEach((t, i) => tone(i % 2 ? 1046 : 784, t, 0.22, 0.25));
-      navigator.vibrate?.([400, 200, 400]);
+      buzz([400, 200, 400]);
     } else {
       tone(440, 0, 1.0, 0.08);
       tone(480, 0, 1.0, 0.08);
@@ -57,5 +59,5 @@ export function startRing(kind: "incoming" | "outgoing") {
 export function stopRing() {
   if (ringTimer) clearInterval(ringTimer);
   ringTimer = null;
-  navigator.vibrate?.(0);
+  buzz(0);
 }

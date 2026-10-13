@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { enableNotifications, isIOS, useInstallPrompt, useNotificationPermission } from "@/lib/pwa";
 import { cn } from "@/lib/utils";
+import { sendTestPush } from "@/components/Reminders";
 
 /** Step-by-step install guide (shown when the browser can't open its own install prompt, e.g. iPhone Safari). */
 export function InstallHelpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
@@ -103,7 +104,7 @@ export function NotifyBanner({ who, className, compact }: { who: "customer" | "e
       <span className="min-w-0 flex-1 font-medium leading-snug">{denied ? <>Notifications are blocked. Tap the 🔒 lock icon in the address bar, then <b>Notifications</b>, then <b>Allow</b>.</> : text}</span>
       {!denied && (
         <Button size="sm" className="h-7 shrink-0 px-3 text-xs" data-testid="enable-notifications-button"
-          onClick={async () => { const p = await enableNotifications(); if (p === "granted") toast.success("Notifications enabled with sound"); else if (p === "denied") toast.error("Notifications were blocked. Allow them in browser settings"); }}>
+          onClick={async () => { const p = await enableNotifications(); if (p === "granted") { toast.success("Notifications enabled with sound"); void sendTestPush(); } else if (p === "denied") toast.error("Notifications were blocked. Allow them in browser settings"); }}>
           Enable
         </Button>
       )}

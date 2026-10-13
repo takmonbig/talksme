@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { ContactFooter } from "@/components/ContactFooter";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Headphones } from "lucide-react";
@@ -111,6 +112,7 @@ export default function Home() {
         </div>
       </section>
       <footer className="border-t py-6 text-center text-xs text-muted-foreground">© talksme.in · OmniChat CRM interactive preview</footer>
+      <ContactFooter />
     </div>
   );
 }

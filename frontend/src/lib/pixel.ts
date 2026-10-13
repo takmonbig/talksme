@@ -14,7 +14,7 @@ export function extractPixelId(raw: string): string {
 }
 
 function ensureScript() {
-  if (window.fbq) return;
+  if (window.fbq) return; // base code already injected by index.html on landing pages
   // Official Meta base code, unrolled.
   const n = function (...args: unknown[]) { if (n.callMethod) n.callMethod(...args); else n.queue.push(args); } as Fbq;
   n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
@@ -32,14 +32,15 @@ export function initPixel(id: string) {
   return true;
 }
 
-/** Fire a standard event once per page load. eventID lets Meta de-duplicate with a future Conversions API. */
-export function trackPixel(id: string, event: "PageView" | "Lead" | "Contact" | string, params?: Record<string, string | number>) {
-  const key = `${id}:${event}:${location.pathname}`; // once per page; client-side navigation to another page tracks again
-  if (!initPixel(id) || fired.has(key)) return;
+/** Init every Pixel configured for the page, then fire the event once per page path (fbq 'track' sends it to all of them).
+ * eventID lets Meta de-duplicate with a future Conversions API. */
+export function trackPixels(ids: string[], event: "PageView" | "Lead" | "Contact" | string, params?: Record<string, string | number>) {
+  const valid = ids.filter((id) => initPixel(id));
+  const key = `${valid.join(",")}:${event}:${location.pathname}`;
+  if (!valid.length || fired.has(key)) return;
   fired.add(key);
-  const eventID = `${event}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const standard = ["PageView", "Lead", "Contact", "CompleteRegistration", "ViewContent"].includes(event);
-  window.fbq!(standard ? "trackSingle" : "trackSingleCustom", id, event, params ?? {}, { eventID });
+  window.fbq!(standard ? "track" : "trackCustom", event, params ?? {}, { eventID: `${event}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` });
 }
 
 /** UTM/campaign info for event params (never phone numbers or chat content). */

@@ -11,7 +11,7 @@ import { EmptyState, MockBadge, Skeleton } from "@/components/common";
 import { LandingRender } from "@/components/LandingRender";
 import { InstallBanner } from "@/components/AppBanners";
 import { appInstalled, isStandalone } from "@/lib/pwa";
-import { campaignParams, trackPixel } from "@/lib/pixel";
+import { campaignParams, trackPixels } from "@/lib/pixel";
 import { apiGet, apiPost } from "@/lib/api";
 import { beginSession } from "@/lib/session";
 import { toastErr } from "@/lib/hooks";
@@ -32,12 +32,13 @@ export default function PublicLanding() {
   const [inApp, setInApp] = useState<string | null>(null);
   const [restore, setRestore] = useState(false);
   const campaign = campaignParams(params);
-  const pixel = q.data?.page.pixel_id ?? "";
+  const pixels = [...new Set([...(q.data?.page.pixel_ids ?? []), q.data?.page.pixel_id ?? ""].filter(Boolean))];
+  const pixelKey = pixels.join(",");
 
   // Real Meta Pixel (admin-configured): PageView on load, Lead + Contact when the chat starts.
   // Event params carry only page + campaign info, never phone numbers or chat content.
-  useEffect(() => { if (pixel) trackPixel(pixel, "PageView"); }, [pixel]);
-  const fire = (ev: "Lead" | "Contact") => { if (pixel) trackPixel(pixel, ev, { content_name: q.data?.page.title ?? "", ...campaign }); };
+  useEffect(() => { if (pixelKey) trackPixels(pixelKey.split(","), "PageView"); }, [pixelKey]);
+  const fire = (ev: "Lead" | "Contact") => { if (pixelKey) trackPixels(pixelKey.split(","), ev, { content_name: q.data?.page.title ?? "", ...campaign }); };
 
   const finish = (r: StartChatOut) => {
     if (r.status === "verification_required") { setChallenge(r); return; }

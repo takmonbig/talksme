@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ContactFooter } from "@/components/ContactFooter";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Building2, Headset, MessageCircle, ShieldCheck, Eye, EyeOff } from "lucide-react";
@@ -136,6 +137,7 @@ export default function Login() {
           </form>
         </div>
       </div>
+      <ContactFooter />
     </div>
   );
 }

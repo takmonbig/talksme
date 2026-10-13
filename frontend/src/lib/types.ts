@@ -3,7 +3,7 @@ export type Role = "customer" | "employee" | "admin" | "superadmin";
 
 export interface User {
   id: string; email: string | null; name: string; role: Role; org_id: string | null; avatar: string; title: string;
-  phone: string | null; backup_skipped: boolean; status: string; verified: boolean; active: boolean; calls_enabled: boolean; guest: boolean; target: number;
+  phone: string | null; backup_skipped: boolean; bio: string; profile_link: string; status: string; verified: boolean; active: boolean; calls_enabled: boolean; guest: boolean; target: number;
   notify_sound: boolean; notify_push: boolean;
 }
 export interface EmployeeStat extends User { open_conversations: number; total_conversations: number; deposits_total: number }
@@ -26,7 +26,7 @@ export interface CustomerProfile {
 export interface Attachment { kind: "image" | "video" | "audio" | "file"; name: string; url: string; size: number }
 export interface Conversation {
   id: string; org_id: string; org_name: string; org_color: string; customer_id: string; customer_user_id: string; customer_name: string;
-  customer_phone: string; employee_id: string | null; employee_name: string; employee_avatar: string; employee_status: string;
+  customer_phone: string; employee_id: string | null; employee_name: string; employee_avatar: string; employee_status: string; employee_title: string; employee_bio: string; employee_link: string; employee_verified: boolean;
   landing_page_id: string | null; landing_title: string; last_message: string; last_message_at: string; unread: number;
   archived: boolean; muted: boolean; vip: boolean; follow_up: boolean; blocked: boolean; calls_enabled: boolean; customer_calls_allowed: boolean; typing: boolean; created_at: string;
 }
@@ -57,7 +57,7 @@ export interface LPImage { id: string; url: string; label: string; description: 
 export interface LandingPageInput {
   title: string; slug: string; template: "A" | "B"; description: string; cta_text: string; primary_color: string; font: string;
   logo_url: string; banner_url: string; trust_items: string[]; routing: Routing; assigned_employee_ids: string[]; images: LPImage[];
-  calls_enabled: boolean; pixel_id: string; published: boolean; available_24_7: boolean;
+  calls_enabled: boolean; pixel_id: string; pixel_ids: string[]; published: boolean; available_24_7: boolean;
   default_message: string; auto_send_default: boolean; employee_can_edit_message: boolean;
 }
 export interface LandingPage extends LandingPageInput { id: string; org_id: string; views: number; leads: number; archived: boolean; created_at: string }
@@ -111,3 +111,4 @@ export interface SALandingRow extends LandingPage { org_name: string; org_slug: 
 export interface SupportIdentity { display_name: string; avatar: string }
 export interface SACustomerPick { user_id: string; name: string; phone: string; orgs: string[]; opted_in: boolean }
 export interface NotificationRecord { id: string; org_id: string; customer_id: string; customer_name: string; title: string; body: string; url: string; status: string; devices: number; delivered: number; sent_by: string; created_at: string }
+export interface PushTestOut { devices: number; delivered: number }

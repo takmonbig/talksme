@@ -79,3 +79,12 @@ WebRTC calls (state simulation + call log), payments/webhooks, push notification
 - Chat: Linkify (http/https/www only, safe href, noopener) in ChatThread; a "Powered by TalksMe" chip links to https://talksme.in; staff see "Customer deleted this for themselves" (deleted_by_customer), and delete-for-self still hides the message only for the customer.
 - Pixel: once per page path (SPA-safe); Admin PixelTester fires real events and checks for a facebook.com/tr request.
 - sw.js: pushsubscriptionchange re-subscribes.
+
+## Latest batch: notifications, profiles, pixels
+- Meta Pixel: index.html injects the official base code (fbq stub + fbevents.js) at page load, but only on /p/* routes, so Pixel Helper and Events Manager detect it. landing_pages.pixel_ids (≤5; pasted code is accepted, and the backend pixel_from() extracts the ID). pixel_id is kept as the first ID for compatibility. trackPixels(ids) inits every ID and fires fbq('track', ...) once per path. The builder's PixelManager adds and removes Pixels and includes a tester for each.
+- Notifications: NotificationReminder (App root, customer + staff) opens a modal every 5 min until permission is granted. It never re-prompts after a denial (it shows unblock steps instead), and on iPhone it shows an install hint. POST /api/push/test sends a real push to the user's devices and returns {devices, delivered}; it is called after enabling.
+- Customers without a phone number get the BackupPhoneDialog once per day (DailyBackupPhonePrompt).
+- Customer chat header: large employee avatar, name, verified badge, title · company, status. Tapping it opens EmployeeProfileDialog (full name, title, company, bio, one safe link). Data comes from conversation fields employee_title/bio/link/verified; the Admin edits them via EmployeeProfileEditor (PATCH /admin/employees/{id} {name,title,bio,profile_link}) and toggles online/offline with EmployeeOnlineSwitch (status).
+- Linkify also matches bare domains (lala.com, xyz.invivo.cc/path) but skips emails and file names.
+- "☁️ Use TalksMe for your business" bubble sits above the Powered-by chip (sm+ screens).
+- ContactFooter: sticky "Contact us now" bar on Home and /login(/demo) for visitors and customers (hidden for staff). It starts a TalksMe support chat.
