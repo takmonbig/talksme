@@ -6,7 +6,7 @@ import { CallManager } from "@/components/chat/CallModal";
 import { useMe } from "@/lib/hooks";
 import { useRealtime } from "@/lib/realtime";
 import { syncPushSubscription } from "@/lib/pwa";
-import { DailyBackupPhonePrompt, NotificationReminder } from "@/components/Reminders";
+import { AdminNotifyReminderPopup, DailyBackupPhonePrompt, NotificationReminder } from "@/components/Reminders";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import PublicLanding from "@/pages/PublicLanding";
@@ -37,7 +37,7 @@ function NotFound() {
 function RealtimeRoot() {
   const me = useMe();
   useRealtime(me.data);
-  const reminders = me.data ? <><NotificationReminder me={me.data} /><DailyBackupPhonePrompt me={me.data} /></> : null;
+  const reminders = me.data ? <><NotificationReminder me={me.data} /><DailyBackupPhonePrompt me={me.data} />{me.data.role !== "superadmin" && <AdminNotifyReminderPopup me={me.data} />}</> : null;
   useEffect(() => { if (me.data) syncPushSubscription(); }, [me.data?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   return <>{me.data && me.data.role !== "superadmin" && <CallManager />}{reminders}</>;
 }

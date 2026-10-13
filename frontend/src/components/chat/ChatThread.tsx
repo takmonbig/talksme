@@ -173,8 +173,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
       {viewer === "customer" && <InstallBanner />}
 
       <div className="relative min-h-0 flex-1">
-      <a href="https://talksme.in" target="_blank" rel="noopener noreferrer" className="pointer-events-auto absolute bottom-9 right-3 z-10 hidden max-w-[150px] rounded-2xl rounded-br-sm border bg-card/90 px-2 py-1 text-[10px] leading-tight text-muted-foreground shadow-sm backdrop-blur transition-colors duration-150 hover:text-foreground sm:block" data-testid="talksme-promo-cloud">☁️ Use <b className="text-primary">TalksMe</b> for your business</a>
-      <a href="https://talksme.in" target="_blank" rel="noopener noreferrer" className="absolute bottom-2 right-3 z-10 rounded-full border bg-card/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" data-testid="powered-by-talksme">Powered by <b className="text-primary">TalksMe</b></a>
+      <a href="https://talksme.in" target="_blank" rel="noopener noreferrer" className="pointer-events-auto absolute bottom-2 right-3 z-10 max-w-[160px] rounded-2xl rounded-br-sm border bg-card/90 px-2 py-1 text-[10px] leading-tight text-muted-foreground shadow-sm backdrop-blur transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" data-testid="talksme-promo-cloud">☁️ Use <b className="text-primary">TalksMe</b> for your business</a>
       <div className="chat-wall h-full overflow-y-auto px-3 pb-8 pt-4 sm:px-6" data-testid="chat-messages">
         {q.isLoading && <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className={cn("h-12 w-2/3", i % 2 && "ml-auto")} />)}</div>}
         {q.isError && <p className="text-center text-sm text-muted-foreground">Messages unavailable — reconnecting…</p>}
@@ -184,6 +183,8 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
               return viewer === "customer"
                 ? <BackupPhoneCard key={m.id} text={m.text} />
                 : <div key={m.id} className="my-2 self-center rounded-full bg-card/90 px-3 py-1 text-[11px] text-muted-foreground shadow-sm" data-testid="system-message">Asked the customer for a WhatsApp backup number (optional)</div>;
+            if (m.kind === "notify_request" && viewer === "customer")
+              return <div key={m.id} className="my-2 w-full max-w-md self-center" data-testid="notify-request-card"><p className="mb-1 text-center text-[11px] text-muted-foreground">{m.text}</p><NotifyBanner who="customer" compact /></div>;
             if (m.sender_role === "system")
               return <div key={m.id} className="my-2 self-center rounded-full bg-card/90 px-3 py-1 text-[11px] text-muted-foreground shadow-sm" data-testid="system-message">{m.text}</div>;
             const own = m.sender_role === mine;

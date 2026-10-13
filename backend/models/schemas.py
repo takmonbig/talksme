@@ -863,6 +863,38 @@ class NotificationRecord(Base):
     created_at: str
 
 
+class NotifyHealthRow(Base):
+    user_id: str
+    profile_id: str = ""
+    kind: str
+    name: str
+    contact: str = ""
+    avatar: str = ""
+    status: str  # on | off | muted
+    devices: int = 0
+    last_subscribed_at: str = ""
+    last_reminded_at: str = ""
+
+
+class NotifyRemindIn(BaseModel):
+    user_id: str
+
+
+class NotifyRemindOut(Base):
+    live: bool
+    in_chat: bool
+    last_reminded_at: str
+    message: str
+
+
+class PendingNotifyReminder(Base):
+    org_id: str = ""
+    org_name: str = ""
+    from_name: str = ""
+    text: str
+    at: str
+
+
 class DefaultMessageIn(BaseModel):
     default_message: str = Field("", max_length=500)
 

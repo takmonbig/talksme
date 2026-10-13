@@ -112,3 +112,6 @@ export interface SupportIdentity { display_name: string; avatar: string }
 export interface SACustomerPick { user_id: string; name: string; phone: string; orgs: string[]; opted_in: boolean }
 export interface NotificationRecord { id: string; org_id: string; customer_id: string; customer_name: string; title: string; body: string; url: string; status: string; devices: number; delivered: number; sent_by: string; created_at: string }
 export interface PushTestOut { devices: number; delivered: number }
+export interface NotifyHealthRow { user_id: string; profile_id: string; kind: "employee" | "customer"; name: string; contact: string; avatar: string; status: "on" | "off" | "muted"; devices: number; last_subscribed_at: string; last_reminded_at: string }
+export interface NotifyRemindOut { live: boolean; in_chat: boolean; last_reminded_at: string; message: string }
+export interface PendingNotifyReminder { org_id: string; org_name: string; from_name: string; text: string; at: string }

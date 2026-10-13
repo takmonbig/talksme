@@ -88,3 +88,9 @@ WebRTC calls (state simulation + call log), payments/webhooks, push notification
 - Linkify also matches bare domains (lala.com, xyz.invivo.cc/path) but skips emails and file names.
 - "☁️ Use TalksMe for your business" bubble sits above the Powered-by chip (sm+ screens).
 - ContactFooter: sticky "Contact us now" bar on Home and /login(/demo) for visitors and customers (hidden for staff). It starts a TalksMe support chat.
+
+## Notification Health panel (latest)
+- Admin → Employees and Admin → Customers each have a "Notifications" tab (NotificationHealthPanel). It shows coverage % plus a row per person with status (on / off = no device / muted = notify_push false), device count and last subscribed time (taken from the max push_subscriptions.updated_at).
+- GET /api/admin/notification-health?kind=employee|customer (admin, own org only). POST /api/admin/notification-health/remind {user_id} returns 404 if the person is outside the org and 429 if they were reminded in the last 5 min (`notify_reminders`). For customers it posts a system message with kind="notify_request" in their latest org conversation; in the chat the customer sees the text plus an Enable banner. It also stores users.notify_reminder_pending and sends a realtime {type:"notify_reminder"}. All reminders are audited.
+- The person sees AdminNotifyReminderPopup (Reminders.tsx). It shows right away if they're online; otherwise it appears on their next app open via GET /api/me/notify-reminder. It is dismissed with POST /api/me/notify-reminder/ack. If permission is already granted, the button reads "Reconnect this device" and re-syncs the subscription.
+- Chat: only the "Use TalksMe for your business" sticker remains (now also on mobile). The "Powered by TalksMe" chip was removed.

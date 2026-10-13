@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { EmployeeOnlineSwitch, EmployeeProfileEditor } from "@/components/EmployeeProfileEditor";
 import { PixelManager } from "@/components/PixelManager";
+import { NotificationHealthPanel } from "@/components/NotificationHealth";
 import { extractPixelId } from "@/lib/pixel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, Copy, ExternalLink, Globe, Monitor, Plus, Smartphone, Trash2, UserPlus, X } from "lucide-react";
+import { BellRing, Check, Copy, ExternalLink, Globe, Monitor, Plus, Smartphone, Trash2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,7 +54,16 @@ function PendingTransfers() {
 
 export const AdminDashboard = () => <AnalyticsView endpoint="/analytics" title="Organization dashboard" subtitle="Team, customers, deposits and landing-page performance." extra={<PendingTransfers />} />;
 export const AdminAnalytics = () => <AnalyticsView endpoint="/analytics" title="Organization analytics" subtitle="Employee KPIs, revenue attribution and conversion." />;
-export const AdminCustomers = () => <CustomersView admin />;
+function WithNotifyTab({ kind, label, children }: { kind: "employee" | "customer"; label: string; children: React.ReactNode }) {
+  return (
+    <Tabs defaultValue="list">
+      <TabsList className="mb-4" data-testid={`${kind}-tabs`}><TabsTrigger value="list" data-testid={`${kind}-tab-list`}>{label}</TabsTrigger><TabsTrigger value="notifications" data-testid={`${kind}-tab-notifications`}><BellRing className="h-3.5 w-3.5" /> Notifications</TabsTrigger></TabsList>
+      <TabsContent value="list">{children}</TabsContent>
+      <TabsContent value="notifications"><NotificationHealthPanel kind={kind} /></TabsContent>
+    </Tabs>
+  );
+}
+export const AdminCustomers = () => <WithNotifyTab kind="customer" label="Customers"><CustomersView admin /></WithNotifyTab>;
 export const AdminDeposits = () => <DepositsView admin />;
 export const AdminConversations = () => <InboxWorkspace mode="admin" />;
 
@@ -139,7 +149,8 @@ function EmployeeDetailSheet({ id, onClose }: { id: string; onClose: () => void 
   );
 }
 
-export function AdminEmployees() {
+export const AdminEmployees = () => <WithNotifyTab kind="employee" label="Employees"><AdminEmployeesList /></WithNotifyTab>;
+function AdminEmployeesList() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<{ id: string; v: string } | null>(null);
