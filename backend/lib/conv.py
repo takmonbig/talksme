@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import HTTPException
 
 from lib.db import db
+from lib.flow import post_bot_messages, start_flow
 from lib.util import iso, new_id, now, now_iso
 
 
@@ -60,6 +61,7 @@ async def shape(user: dict, convs: list[dict]) -> list[dict]:
             "employee_bio": emp.get("bio", ""),
             "employee_link": emp.get("profile_link", ""),
             "employee_verified": bool(emp.get("verified")),
+            "employee_phone": emp.get("display_phone", "") if emp.get("show_phone") else "",
             "customer_name": prof.get("name", c["customer_name"]),
             "unread": c.get("unread_customer" if is_cust else "unread_employee", 0),
             "archived": user["id"] in c.get("archived_by", []),
@@ -137,7 +139,8 @@ async def open_conversation(user: dict, lp: dict, preferred: Optional[str]) -> s
                                       "text": f"Connected to {emp['name']}" if emp else "You're in the queue — the next available associate will reply shortly.",
                                       "attachment": None, "reply_to": None, "reply_preview": "", "status": "read",
                                       "created_at": t, "idempotency_key": new_id(), "hidden_for": []})
-        await send_auto_messages(conv, "welcome")
+        if not await start_flow(conv, lp):
+            await send_auto_messages(conv, "welcome")
         if not user.get("phone") and not user.get("backup_skipped"):
             await db.messages.insert_one({"id": new_id(), "conversation_id": conv["id"], "org_id": org_id, "sender_role": "system",
                                           "sender_id": None, "sender_name": "talksme.in", "kind": "phone_request",
@@ -157,25 +160,12 @@ async def send_auto_messages(c: dict, kind: str) -> None:
     if not emp or not emp.get("active", True) or not cfg.get("enabled", True):
         return
     if kind == "welcome":
-        texts = [m["text"] for m in cfg.get("welcome", []) if m.get("enabled", True) and m.get("text", "").strip()]
+        items = [m for m in cfg.get("welcome", []) if m.get("enabled", True) and (m.get("text", "").strip() or m.get("attachment"))]
     else:
         if not cfg.get("return_enabled") or not cfg.get("return_text", "").strip():
             return
         if (c.get("last_return_auto_at") or "") > iso(now() - timedelta(hours=12)) or c.get("last_message_at", "") > iso(now() - timedelta(hours=12)):
             return
-        texts = [cfg["return_text"]]
-    if not texts:
-        return
-    org = await db.organizations.find_one({"id": c["org_id"]}, {"_id": 0, "name": 1}) or {}
-    first = (c.get("customer_name") or "").split(" ")[0]
-    base = now()
-    for i, txt in enumerate(texts):
-        body = txt.replace("{name}", first).replace("{org}", org.get("name", "")).replace("{employee}", emp["name"]).strip()
-        await db.messages.insert_one({"id": new_id(), "conversation_id": c["id"], "org_id": c["org_id"], "sender_role": "employee",
-                                      "sender_id": emp["id"], "sender_name": emp["name"], "text": body, "attachment": None, "auto": True,
-                                      "reply_to": None, "reply_preview": "", "status": "sent", "created_at": iso(base + timedelta(milliseconds=50 * (i + 1))),
-                                      "idempotency_key": new_id(), "hidden_for": []})
-    upd: dict = {"last_message": body[:120], "last_message_at": iso(base + timedelta(milliseconds=50 * len(texts)))}
-    if kind == "return":
-        upd["last_return_auto_at"] = upd["last_message_at"]
-    await db.conversations.update_one({"id": c["id"]}, {"$set": upd, "$inc": {"unread_customer": len(texts)}})
+        items = [{"text": cfg["return_text"]}]
+    if items and await post_bot_messages(c, items) and kind == "return":
+        await db.conversations.update_one({"id": c["id"]}, {"$set": {"last_return_auto_at": now_iso()}})

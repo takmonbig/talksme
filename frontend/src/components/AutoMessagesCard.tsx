@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/common";
+import { MediaAttachField } from "@/components/chat/Stickers";
 import { apiGet, apiPut } from "@/lib/api";
 import { toastErr, useMe } from "@/lib/hooks";
 import type { AutoMessages } from "@/lib/types";
@@ -32,7 +33,7 @@ export function AutoMessagesCard() {
   if (q.isLoading || !d) return <Skeleton className="h-48" />;
   const preview = (t: string) => t.replace("{name}", "Rahul").replace("{employee}", me.data?.name ?? "You").replace("{org}", "your business");
   const setMsg = (i: number, patch: Partial<AutoMessages["welcome"][number]>) => setD({ ...d, welcome: d.welcome.map((m, j) => (j === i ? { ...m, ...patch } : m)) });
-  const valid = d.welcome.every((m) => m.text.trim()) && (!d.return_enabled || d.return_text.trim());
+  const valid = d.welcome.every((m) => m.text.trim() || m.attachment) && (!d.return_enabled || d.return_text.trim());
 
   return (
     <div className="space-y-4 rounded-2xl border bg-card p-5" data-testid="auto-messages-card">
@@ -51,14 +52,15 @@ export function AutoMessagesCard() {
               <Button size="icon-sm" variant="ghost" onClick={() => setD({ ...d, welcome: d.welcome.filter((_, j) => j !== i) })} data-testid="auto-message-delete"><Trash2 className="h-3.5 w-3.5" /></Button>
             </div>
             <Textarea value={m.text} maxLength={1000} onChange={(e) => setMsg(i, { text: e.target.value })} rows={2} data-testid="auto-message-input" />
+            <div className="mt-1.5"><MediaAttachField value={m.attachment ?? null} onChange={(a) => setMsg(i, { attachment: a })} testid="auto-message-media" /></div>
             {m.text && <p className="mt-1.5 rounded-lg bg-bubble-out px-2.5 py-1.5 text-xs text-bubble-out-foreground" data-testid="auto-message-preview">{preview(m.text)}</p>}
           </div>
         ))}
-        {d.welcome.length < 5 && (
+        {d.welcome.length < 20 && (
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => setD({ ...d, welcome: [...d.welcome, { id: "", text: "", enabled: true }] })} data-testid="auto-message-add"><Plus className="h-3.5 w-3.5" /> Add message</Button>
+            <Button size="sm" variant="outline" onClick={() => setD({ ...d, welcome: [...d.welcome, { id: "", text: "", attachment: null, enabled: true }] })} data-testid="auto-message-add"><Plus className="h-3.5 w-3.5" /> Add message</Button>
             {TEMPLATES.filter((t) => !d.welcome.some((m) => m.text === t)).slice(0, 3).map((t) => (
-              <button key={t} onClick={() => setD({ ...d, welcome: [...d.welcome, { id: "", text: t, enabled: true }] })} className="max-w-60 truncate rounded-full border bg-background px-3 py-1 text-xs transition-colors duration-150 hover:bg-muted" data-testid="auto-template-chip">+ {t}</button>
+              <button key={t} onClick={() => setD({ ...d, welcome: [...d.welcome, { id: "", text: t, attachment: null, enabled: true }] })} className="max-w-60 truncate rounded-full border bg-background px-3 py-1 text-xs transition-colors duration-150 hover:bg-muted" data-testid="auto-template-chip">+ {t}</button>
             ))}
           </div>
         )}

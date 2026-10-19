@@ -4,14 +4,14 @@ export type Role = "customer" | "employee" | "admin" | "superadmin";
 export interface User {
   id: string; email: string | null; name: string; role: Role; org_id: string | null; avatar: string; title: string;
   phone: string | null; backup_skipped: boolean; bio: string; profile_link: string; status: string; verified: boolean; active: boolean; calls_enabled: boolean; guest: boolean; target: number;
-  notify_sound: boolean; notify_push: boolean;
+  notify_sound: boolean; notify_push: boolean; display_phone: string; show_phone: boolean;
 }
 export interface EmployeeStat extends User { open_conversations: number; total_conversations: number; deposits_total: number }
 
 export interface Organization {
   id: string; name: string; slug: string; domain: string; domain_status: string; plan_id: string; billing_cycle: string;
   seats: number; status: string; primary_color: string; accent_color: string; font: string; logo_url: string; banner_url: string;
-  retention_days: number; created_at: string; trial_ends: string | null; features: Record<string, boolean>;
+  retention_days: number; created_at: string; trial_ends: string | null; features: Record<string, boolean>; intro_video_url: string; intro_enabled: boolean;
 }
 export interface OrgRow extends Organization { plan_name: string; employees: number; customers: number; conversations: number; deposits_total: number; mrr: number }
 
@@ -23,16 +23,16 @@ export interface CustomerProfile {
   follow_ups: FollowUp[]; created_at: string; last_active: string; total_deposits: number; deposit_count: number;
 }
 
-export interface Attachment { kind: "image" | "video" | "audio" | "file"; name: string; url: string; size: number }
+export interface Attachment { kind: "image" | "video" | "audio" | "file" | "sticker"; name: string; url: string; size: number }
 export interface Conversation {
   id: string; org_id: string; org_name: string; org_color: string; customer_id: string; customer_user_id: string; customer_name: string;
-  customer_phone: string; employee_id: string | null; employee_name: string; employee_avatar: string; employee_status: string; employee_title: string; employee_bio: string; employee_link: string; employee_verified: boolean;
+  customer_phone: string; employee_id: string | null; employee_name: string; employee_avatar: string; employee_status: string; employee_title: string; employee_bio: string; employee_link: string; employee_verified: boolean; employee_phone: string;
   landing_page_id: string | null; landing_title: string; last_message: string; last_message_at: string; unread: number;
   archived: boolean; muted: boolean; vip: boolean; follow_up: boolean; blocked: boolean; calls_enabled: boolean; customer_calls_allowed: boolean; typing: boolean; created_at: string;
 }
 export interface Message {
   id: string; conversation_id: string; sender_role: string; sender_id: string | null; sender_name: string; text: string;
-  attachment: Attachment | null; reply_to: string | null; reply_preview: string; status: string; kind?: string; deleted_by_customer?: boolean; created_at: string;
+  attachment: Attachment | null; reply_to: string | null; reply_preview: string; status: string; kind?: string; options?: MenuOption[]; answered?: string; deleted_by_customer?: boolean; created_at: string;
   pending?: boolean; failed?: boolean; idempotency_key?: string;
 }
 export interface Call { id: string; conversation_id: string; initiated_by: string; status: string; duration: number; at: string }
@@ -58,7 +58,7 @@ export interface LandingPageInput {
   title: string; slug: string; template: "A" | "B"; description: string; cta_text: string; primary_color: string; font: string;
   logo_url: string; banner_url: string; trust_items: string[]; routing: Routing; assigned_employee_ids: string[]; images: LPImage[];
   calls_enabled: boolean; pixel_id: string; pixel_ids: string[]; published: boolean; available_24_7: boolean;
-  default_message: string; auto_send_default: boolean; employee_can_edit_message: boolean;
+  default_message: string; auto_send_default: boolean; employee_can_edit_message: boolean; flow: Flow;
 }
 export interface LandingPage extends LandingPageInput { id: string; org_id: string; views: number; leads: number; archived: boolean; created_at: string }
 export interface PublicEmployee { id: string; name: string; avatar: string; title: string; status: string; verified: boolean }
@@ -101,7 +101,7 @@ export interface SACustomerDetail { customer: SACustomerRow; conversations: SACo
 export interface SACompareRow { id: string; name: string; email: string; org_id: string; org_name: string; avatar: string; active: boolean; customers: number; conversations: number; messages_sent: number; avg_reply_minutes: number | null; converted: number; conversion_rate: number; deposits_total: number; deposit_count: number; target: number }
 export interface SASearchHit { kind: "message" | "phone"; message_id: string | null; conversation_id: string; customer_id: string; customer_name: string; customer_phone: string; employee_name: string; org_id: string; org_name: string; sender_name: string; sender_role: string; text: string; created_at: string }
 // Employee auto messages (mirrors AutoMsg / AutoMessages)
-export interface AutoMsg { id: string; text: string; enabled: boolean }
+export interface AutoMsg { id: string; text: string; attachment: Attachment | null; enabled: boolean }
 export interface AutoMessages { enabled: boolean; welcome: AutoMsg[]; return_enabled: boolean; return_text: string }
 
 // Super Admin control center / platform support / admin notifications (mirror backend/models/schemas.py)
@@ -115,3 +115,11 @@ export interface PushTestOut { devices: number; delivered: number }
 export interface NotifyHealthRow { user_id: string; profile_id: string; kind: "employee" | "customer"; name: string; contact: string; avatar: string; status: "on" | "off" | "muted"; devices: number; last_subscribed_at: string; last_reminded_at: string }
 export interface NotifyRemindOut { live: boolean; in_chat: boolean; last_reminded_at: string; message: string }
 export interface PendingNotifyReminder { org_id: string; org_name: string; from_name: string; text: string; at: string }
+
+export interface MenuOption { id: string; label: string }
+export interface FlowMsg { id: string; text: string; attachment: Attachment | null }
+export interface FlowOption { id: string; label: string; next: string }
+export interface FlowNode { id: string; title: string; messages: FlowMsg[]; options: FlowOption[]; prompt: string }
+export interface Flow { enabled: boolean; root: string; nodes: FlowNode[] }
+export interface Sticker { id: string; scope: "builtin" | "org" | "mine"; name: string; url: string; owner_id: string }
+export interface IntroOut { enabled: boolean; url: string }

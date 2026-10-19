@@ -117,7 +117,7 @@ async def send_message(cid: str, body: MessageIn, user: dict = Depends(chat_user
            "idempotency_key": body.idempotency_key, "hidden_for": []}
     await db.messages.insert_one(dict(msg))
     other = "employee" if side == "customer" else "customer"
-    label = body.text.strip() or {"image": "📷 Photo", "video": "🎬 Video", "audio": "🎤 Voice note", "file": "📎 File"}[body.attachment.kind]
+    label = body.text.strip() or {"image": "📷 Photo", "video": "🎬 Video", "audio": "🎤 Voice note", "file": "📎 File", "sticker": "🙂 Sticker"}[body.attachment.kind]
     upd: dict = {"$set": {"last_message": label[:120], "last_message_at": t, f"typing.{side}": ""}, "$inc": {f"unread_{other}": 1}}
     if side == "employee" and not c.get("employee_id"):
         upd["$set"].update({"employee_id": user["id"], "employee_name": user["name"]})  # claim from queue

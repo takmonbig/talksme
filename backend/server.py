@@ -15,7 +15,7 @@ load_dotenv(ROOT_DIR / '.env')
 from lib.db import client, db, ensure_indexes
 from lib.seed_data import reset_demo
 from lib.realtime import hub
-from routers import admin, auth, automsg, platform, chat, crm, notify, notify_health, public, realtime, sa_explorer, superadmin
+from routers import admin, auth, automsg, platform, chat, crm, notify, extras, notify_health, public, realtime, sa_explorer, superadmin
 
 
 async def _boot() -> None:
@@ -47,7 +47,7 @@ async def root():
     return {"message": "OmniChat CRM API", "mode": "preview"}
 
 
-for r in (auth, public, chat, crm, admin, superadmin, sa_explorer, realtime, notify, notify_health, automsg, platform):
+for r in (auth, public, chat, crm, admin, superadmin, sa_explorer, realtime, notify, notify_health, extras, automsg, platform):
     api_router.include_router(r.router)
 
 # Include the router in the main app

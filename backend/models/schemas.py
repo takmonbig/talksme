@@ -41,6 +41,8 @@ class User(Base):
     target: float = 0
     notify_sound: bool = True
     notify_push: bool = False
+    display_phone: str = ""
+    show_phone: bool = False
 
 
 class LoginIn(BaseModel):
@@ -77,6 +79,8 @@ class Organization(Base):
     created_at: str
     trial_ends: Optional[str] = None
     features: dict[str, bool] = {}
+    intro_video_url: str = ""
+    intro_enabled: bool = True
 
 
 class OrgBrandingUpdate(BaseModel):
@@ -87,6 +91,8 @@ class OrgBrandingUpdate(BaseModel):
     logo_url: Optional[str] = None
     banner_url: Optional[str] = None
     retention_days: Optional[int] = Field(None, ge=7, le=3650)
+    intro_video_url: Optional[str] = Field(None, pattern=r"^(https://\S{3,500})?$")
+    intro_enabled: Optional[bool] = None
 
 
 class DomainIn(BaseModel):
@@ -155,7 +161,7 @@ class FollowUpPatch(BaseModel):
 
 # ---------- conversations / messages ----------
 class Attachment(Base):
-    kind: Literal["image", "video", "audio", "file"]
+    kind: Literal["image", "video", "audio", "file", "sticker"]
     name: str
     url: str = ""
     size: int = 0
@@ -178,6 +184,7 @@ class Conversation(Base):
     employee_bio: str = ""
     employee_link: str = ""
     employee_verified: bool = False
+    employee_phone: str = ""  # Admin-set display number, only when switched on
     landing_page_id: Optional[str] = None
     landing_title: str = ""
     last_message: str = ""
@@ -205,7 +212,9 @@ class Message(Base):
     reply_to: Optional[str] = None
     reply_preview: str = ""
     status: str = "sent"
-    kind: str = "text"  # "phone_request" = the "share your WhatsApp number for backup" card
+    kind: str = "text"  # "phone_request" = backup-number card; "menu" = choose-option buttons
+    options: list["MenuOption"] = []
+    answered: str = ""
     deleted_by_customer: bool = False  # staff view: customer hid this for themselves only
     created_at: str
 
@@ -330,6 +339,38 @@ class DepositEvent(Base):
 
 
 # ---------- landing pages ----------
+class MenuOption(Base):
+    id: str
+    label: str
+
+
+class FlowMsg(Base):
+    id: str = ""
+    text: str = Field("", max_length=1000)
+    attachment: Optional[Attachment] = None
+
+
+class FlowOption(Base):
+    id: str = ""
+    label: str = Field(min_length=1, max_length=40)
+    next: str = ""  # node id ("" = end of the flow)
+
+
+class FlowNode(Base):
+    id: str
+    title: str = Field("", max_length=60)
+    messages: list[FlowMsg] = Field(default_factory=list, max_length=20)
+    options: list[FlowOption] = Field(default_factory=list, max_length=10)
+    prompt: str = Field("Please choose an option 👇", max_length=200)
+
+
+class Flow(Base):
+    """Automatic first messages + multi-step 'choose an option' menu tree for one landing page."""
+    enabled: bool = False
+    root: str = ""
+    nodes: list[FlowNode] = Field(default_factory=list, max_length=50)
+
+
 class LPImage(Base):
     id: str
     url: str
@@ -361,6 +402,7 @@ class LandingPage(Base):
     published: bool = False
     available_24_7: bool = False
     default_message: str = ""
+    flow: Flow = Flow()
     auto_send_default: bool = False
     employee_can_edit_message: bool = False
     archived: bool = False
@@ -391,6 +433,7 @@ class LandingPageIn(BaseModel):
     default_message: str = Field("", max_length=500)
     auto_send_default: bool = False
     employee_can_edit_message: bool = False
+    flow: Flow = Flow()
 
     @field_validator("pixel_id", mode="before")
     @classmethod
@@ -489,6 +532,9 @@ class EmployeePatch(BaseModel):
     verified: Optional[bool] = None
     calls_enabled: Optional[bool] = None
     target: Optional[float] = Field(None, ge=0)
+    avatar: Optional[str] = Field(None, pattern=r"^(https://\S{3,500})?$")
+    display_phone: Optional[str] = Field(None, pattern=r"^(\+?[\d ]{6,18})?$")
+    show_phone: Optional[bool] = None
 
 
 class EmployeeStat(User):
@@ -735,13 +781,14 @@ class IceServersOut(Base):
 # ---------- employee auto messages ----------
 class AutoMsg(Base):
     id: str = ""
-    text: str = Field(min_length=1, max_length=1000)
+    text: str = Field("", max_length=1000)
+    attachment: Optional[Attachment] = None
     enabled: bool = True
 
 
 class AutoMessages(Base):
     enabled: bool = True
-    welcome: list[AutoMsg] = Field(default_factory=list, max_length=5)
+    welcome: list[AutoMsg] = Field(default_factory=list, max_length=20)
     return_enabled: bool = False
     return_text: str = Field(default="", max_length=1000)
 
@@ -902,3 +949,29 @@ class DefaultMessageIn(BaseModel):
 class PushTestOut(Base):
     devices: int
     delivered: int
+
+
+class MenuChoiceIn(BaseModel):
+    option_id: str
+
+
+class Sticker(Base):
+    id: str
+    scope: Literal["builtin", "org", "mine"]
+    name: str = ""
+    url: str
+    owner_id: str = ""
+
+
+class StickerIn(BaseModel):
+    url: str = Field(pattern=r"^https://\S{3,500}$")
+    name: str = Field("", max_length=40)
+    scope: Literal["org", "mine"] = "mine"
+
+
+class IntroOut(Base):
+    enabled: bool
+    url: str
+
+
+Message.model_rebuild()

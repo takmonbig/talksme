@@ -111,7 +111,7 @@ export default function Home() {
           <Link to="/demo" className={cn(buttonVariants({ size: "lg" }), "bg-brand text-white")}>Explore roles</Link>
         </div>
       </section>
-      <footer className="border-t py-6 text-center text-xs text-muted-foreground">© talksme.in · OmniChat CRM interactive preview</footer>
+      <footer className="border-t py-6 text-center text-xs text-muted-foreground">© talksme.in · a product of Takmon Boost</footer>
       <ContactFooter />
     </div>
   );

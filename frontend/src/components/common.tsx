@@ -18,7 +18,7 @@ export function Logo({ className, compact }: { className?: string; compact?: boo
           <div className="font-heading text-[17px] font-extrabold tracking-tight">
             talks<span className="text-brand">me</span><span className="text-sky-500">.in</span>
           </div>
-          <div className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">OmniChat CRM</div>
+          <div className="mt-0.5 text-[10px] font-medium tracking-[0.04em] text-muted-foreground" data-testid="brand-tagline">a product of <b className="font-semibold text-foreground/80">Takmon Boost</b></div>
         </div>
       )}
     </div>

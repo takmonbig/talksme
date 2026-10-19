@@ -73,7 +73,7 @@ export default function PublicLanding() {
           <button className="text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline" onClick={() => { setChallenge(null); setRestore(true); setOpen(true); }} data-testid="restore-chats-link">Chatted with us before? Restore your chats with WhatsApp</button>
         </div>
         {start.isPending && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" data-testid="chat-starting-overlay"><div className="rounded-2xl bg-white px-6 py-4 text-sm font-semibold text-slate-800 shadow-xl">Opening your chat…</div></div>}
-        <p className="pb-6 text-center text-[11px] text-slate-400">Powered by talksme.in OmniChat · {o.domain ? `${o.domain}/${page.slug}` : `/p/${o.slug}/${page.slug}`}</p>
+        <p className="pb-6 text-center text-[11px] text-slate-400">talksme.in · a product of Takmon Boost · {o.domain ? `${o.domain}/${page.slug}` : `/p/${o.slug}/${page.slug}`}</p>
       </div>
       <Dialog open={!!inApp} onOpenChange={(o) => { if (!o && inApp) nav(inApp); }}>
         <DialogContent className="sm:max-w-sm" data-testid="open-in-app-dialog">

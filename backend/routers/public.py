@@ -1,13 +1,13 @@
 """Public landing pages + customer onboarding. Entering a phone number never discloses existing history."""
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from lib.auth import optional_user, set_session
 from lib.conv import open_conversation
 from lib.db import db
-from lib.util import audit, now_iso
+from lib.util import audit, iso, now_iso
 from lib.util import new_id
 from routers.realtime import create_challenge
 from models.schemas import PublicLanding, StartChatIn, StartChatOut, VerifyIn
@@ -78,11 +78,13 @@ async def default_message(user: dict, lp: dict, cid: str, text: str) -> str:
         return text
     key = f"default-msg-{cid}"  # idempotent: refreshes / double clicks / retries can't send it twice
     if not await db.messages.find_one({"conversation_id": cid, "idempotency_key": key}, {"_id": 1}):
-        t = now_iso()
+        conv = await db.conversations.find_one({"id": cid}, {"_id": 0, "created_at": 1}) or {}
+        # placed right after "Connected to…" so the customer's first message comes BEFORE the automatic replies / menu
+        t = iso(datetime.fromisoformat(conv["created_at"]) + timedelta(milliseconds=10)) if conv.get("created_at") else now_iso()
         await db.messages.insert_one({"id": new_id(), "conversation_id": cid, "org_id": lp["org_id"], "sender_role": "customer", "sender_id": user["id"],
                                       "sender_name": user["name"], "text": text, "attachment": None, "reply_to": None, "reply_preview": "",
                                       "status": "sent", "created_at": t, "idempotency_key": key, "hidden_for": []})
-        await db.conversations.update_one({"id": cid}, {"$set": {"last_message": text[:120], "last_message_at": t}, "$inc": {"unread_employee": 1}})
+        await db.conversations.update_one({"id": cid}, {"$inc": {"unread_employee": 1}})
     return ""
 
 

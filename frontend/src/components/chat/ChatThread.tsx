@@ -16,6 +16,8 @@ import { Avatar, Skeleton } from "@/components/common";
 import { CallButton, startCall } from "@/components/chat/CallModal";
 import { InstallBanner, NotifyBanner } from "@/components/AppBanners";
 import { BackupPhoneCard } from "@/components/chat/BackupPhone";
+import { AttachmentPreview, StickerPicker } from "@/components/chat/Stickers";
+import { MenuCard } from "@/components/chat/MenuCard";
 import { MAX_UPLOAD, uploadFile } from "@/lib/media";
 import { isTyping, wsSend } from "@/lib/realtime";
 import { apiGet, apiPost } from "@/lib/api";
@@ -34,6 +36,7 @@ function Ticks({ m }: { m: Message }) {
 }
 
 function AttachmentView({ a }: { a: Attachment }) {
+  if (a.kind === "sticker") return <AttachmentPreview a={a} />;
   if (a.kind === "image" && a.url) return <a href={a.url} target="_blank" rel="noreferrer"><img src={a.url} alt={a.name} className="mb-1 max-h-60 w-full rounded-lg object-cover" /></a>;
   if (a.kind === "video" && a.url) return <video src={a.url} controls preload="metadata" className="mb-1 max-h-60 w-full rounded-lg bg-black" />;
   if (a.kind === "audio" && a.url) return <audio src={a.url} controls preload="metadata" className="mb-1 h-10 w-60 max-w-full" data-testid="voice-note-player" />;
@@ -141,7 +144,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="chat-thread">
-      <div className={cn("flex shrink-0 items-center gap-3 border-b bg-card/80 px-3 backdrop-blur-xl", viewer === "customer" && conv.employee_name ? "h-[76px]" : "h-16")}>
+      <div className={cn("flex shrink-0 items-center gap-3 border-b bg-card/80 px-3 backdrop-blur-xl", viewer === "customer" && conv.employee_name ? (conv.employee_phone ? "h-[92px]" : "h-[76px]") : "h-16")}>
         {onBack && <Button variant="ghost" size="icon" onClick={onBack} data-testid="chat-back-button"><ArrowLeft className="h-4 w-4" /></Button>}
         {viewer === "customer" && conv.employee_name ? (
           <button className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left transition-colors duration-150 hover:bg-muted/60" onClick={() => setProfile(true)} data-testid="chat-employee-profile-trigger">
@@ -149,6 +152,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
             <span className="min-w-0">
               <span className="flex items-center gap-1 truncate text-lg font-bold leading-tight" data-testid="chat-header-title">{conv.employee_name}{conv.employee_verified && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />}</span>
               <span className="block truncate text-xs font-medium text-muted-foreground" data-testid="chat-header-employee-details">{[conv.employee_title, conv.org_name].filter(Boolean).join(" · ")}</span>
+              {conv.employee_phone && <span className="block truncate text-[11px] font-semibold text-foreground/80" data-testid="chat-header-employee-phone">📞 {conv.employee_phone}</span>}
               <span className="block truncate text-[11px]" data-testid="chat-header-subtitle">{conv.typing || typingQ.data ? <span className="text-primary">typing…</span> : <span className={conv.employee_status === "online" ? "text-emerald-600" : "text-muted-foreground"}>{conv.employee_status === "online" ? "● Online" : conv.employee_status} · tap to view profile</span>}</span>
             </span>
           </button>
@@ -173,7 +177,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
       {viewer === "customer" && <InstallBanner />}
 
       <div className="relative min-h-0 flex-1">
-      <a href="https://talksme.in" target="_blank" rel="noopener noreferrer" className="pointer-events-auto absolute bottom-2 right-3 z-10 max-w-[160px] rounded-2xl rounded-br-sm border bg-card/90 px-2 py-1 text-[10px] leading-tight text-muted-foreground shadow-sm backdrop-blur transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" data-testid="talksme-promo-cloud">☁️ Use <b className="text-primary">TalksMe</b> for your business</a>
+      <a href="https://talksme.in" target="_blank" rel="noopener noreferrer" className="pointer-events-auto absolute bottom-2 right-3 z-10 max-w-[160px] rounded-2xl rounded-br-sm border bg-card/90 px-2 py-1 text-[10px] leading-tight text-muted-foreground shadow-sm backdrop-blur transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" data-testid="talksme-promo-cloud">☁️ Use <b className="text-primary">TalksMe</b> for your business<span className="block text-[9px] opacity-80">a product of Takmon Boost</span></a>
       <div className="chat-wall h-full overflow-y-auto px-3 pb-8 pt-4 sm:px-6" data-testid="chat-messages">
         {q.isLoading && <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className={cn("h-12 w-2/3", i % 2 && "ml-auto")} />)}</div>}
         {q.isError && <p className="text-center text-sm text-muted-foreground">Messages unavailable — reconnecting…</p>}
@@ -188,9 +192,11 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
             if (m.sender_role === "system")
               return <div key={m.id} className="my-2 self-center rounded-full bg-card/90 px-3 py-1 text-[11px] text-muted-foreground shadow-sm" data-testid="system-message">{m.text}</div>;
             const own = m.sender_role === mine;
+            if (m.kind === "menu") return <MenuCard key={m.id} m={m} conv={conv} viewer={viewer} />;
+            const sticker = m.attachment?.kind === "sticker" && !m.text;
             return (
               <div key={m.id} className={cn("group flex max-w-[85%] items-end gap-1 animate-rise sm:max-w-[70%]", own ? "flex-row-reverse self-end" : "self-start")} data-testid="chat-message">
-                <div className={cn("rounded-2xl px-3 py-2 text-sm shadow-sm", own ? "rounded-br-md bg-bubble-out text-bubble-out-foreground" : "rounded-bl-md bg-bubble-in")}>
+                <div className={cn("rounded-2xl px-3 py-2 text-sm", sticker ? "bg-transparent px-0 py-0" : cn("shadow-sm", own ? "rounded-br-md bg-bubble-out text-bubble-out-foreground" : "rounded-bl-md bg-bubble-in"))}>
                   {viewer === "admin" && <p className="mb-0.5 text-[10px] font-semibold text-primary">{m.sender_name}</p>}
                   {m.reply_preview && <div className="mb-1 rounded-md border-l-2 border-primary bg-black/5 px-2 py-1 text-xs opacity-80 dark:bg-white/5">{m.reply_preview}</div>}
                   {m.attachment && <AttachmentView a={m.attachment} />}
@@ -249,6 +255,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
                   </div>
                 </PopoverContent>
               </Popover>
+              {!disabled && <StickerPicker onPick={(a) => send.mutate({ text: "", attachment: a, reply_to: null, idempotency_key: uid() })} />}
               <Popover>
                 <PopoverTrigger render={<Button variant="ghost" size="icon" data-testid="attach-button" />}><Paperclip className="h-5 w-5" /></PopoverTrigger>
                 <PopoverContent className="w-56 p-1.5" align="start">

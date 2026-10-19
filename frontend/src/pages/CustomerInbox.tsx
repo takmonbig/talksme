@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, EmptyState, Logo, Skeleton, ThemeToggle, VerifiedBadge } from "@/components/common";
 import { ChatThread } from "@/components/chat/ChatThread";
+import { IntroFlow } from "@/components/IntroFlow";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { endSession } from "@/lib/session";
 import { timeAgo, toastErr, useMe } from "@/lib/hooks";
@@ -104,6 +105,7 @@ export default function CustomerInbox() {
 
   return (
     <div className="flex h-[100dvh] flex-col bg-background">
+      {conv && <IntroFlow orgId={conv.org_id} />}
       {!online && <div className="flex items-center justify-center gap-2 bg-amber-500 py-1 text-xs font-semibold text-white" data-testid="offline-banner"><WifiOff className="h-3.5 w-3.5" /> You're offline — reconnecting…</div>}
       <div className="flex min-h-0 flex-1">
         <aside className={cn("flex w-full shrink-0 flex-col border-r bg-card md:w-96", conversationId && "hidden md:flex")}>

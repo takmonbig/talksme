@@ -55,13 +55,17 @@ export function NotificationReminder({ me }: { me: User }) {
   const perm = useNotificationPermission();
   const [open, setOpen] = useState(false);
   const needs = me.role !== "superadmin" && perm !== "granted" && (perm !== "unsupported" || isIOS());
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!needs) { setOpen(false); return; }
-    const last = Number(sessionStorage.getItem("notify-reminder-at") || 0);
-    const wait = Math.max(5000, last + FIVE_MIN - Date.now());
-    const t = setTimeout(() => setOpen(true), wait);
+    const due = () => Number(sessionStorage.getItem("notify-reminder-at") || 0) + FIVE_MIN;
+    const t = setTimeout(() => {
+      // the first-visit intro (or another prompt) may have pushed the reminder back while we waited
+      if (Date.now() < due() || document.querySelector("[data-testid=intro-video-overlay],[data-testid=intro-install-dialog],[data-testid=intro-notify-dialog]")) setTick((x) => x + 1);
+      else setOpen(true);
+    }, Math.max(5000, due() - Date.now()));
     return () => clearTimeout(t);
-  }, [needs, open]);
+  }, [needs, open, tick]);
   const close = () => { sessionStorage.setItem("notify-reminder-at", String(Date.now())); setOpen(false); };
   const denied = perm === "denied";
   return (
@@ -94,8 +98,12 @@ export function DailyBackupPhonePrompt({ me }: { me: User }) {
     if (me.role !== "customer" || me.phone) return;
     const key = `backup-ask-${new Date().toISOString().slice(0, 10)}`;
     if (localStorage.getItem(key)) return;
-    const t = setTimeout(() => { localStorage.setItem(key, "1"); setOpen(true); }, 2500);
-    return () => clearTimeout(t);
+    // wait until no other popup (intro video, install/notification prompts) is on screen
+    const t = setInterval(() => {
+      if (sessionStorage.getItem("intro-session") || document.querySelector("[role=dialog],[data-testid=intro-video-overlay]") || (location.pathname.startsWith("/chat/") && !localStorage.getItem("talksme-intro-done"))) return;
+      clearInterval(t); localStorage.setItem(key, "1"); setOpen(true);
+    }, 2500);
+    return () => clearInterval(t);
   }, [me.role, me.phone]);
   return <BackupPhoneDialog open={open} onOpenChange={setOpen} />;
 }

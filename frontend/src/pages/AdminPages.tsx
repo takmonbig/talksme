@@ -2,6 +2,8 @@ import { useState } from "react";
 import { EmployeeOnlineSwitch, EmployeeProfileEditor } from "@/components/EmployeeProfileEditor";
 import { PixelManager } from "@/components/PixelManager";
 import { NotificationHealthPanel } from "@/components/NotificationHealth";
+import { EMPTY_FLOW, FlowEditor, flowValid } from "@/components/FlowEditor";
+import { IntroVideoCard } from "@/components/IntroFlow";
 import { extractPixelId } from "@/lib/pixel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -224,7 +226,7 @@ const EMPTY_LP: LandingPageInput = {
   primary_color: "#0284C7", font: "Inter", logo_url: "", banner_url: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1400&q=70",
   trust_items: ["Verified team members", "Secure, encrypted chat", "Replies in under 5 minutes"], routing: "round_robin", assigned_employee_ids: [], images: [],
   calls_enabled: true, pixel_id: "", pixel_ids: [], published: false, available_24_7: false,
-  default_message: "Hello! I am interested in your service. Please share more details.", auto_send_default: false, employee_can_edit_message: false,
+  default_message: "Hello! I am interested in your service. Please share more details.", auto_send_default: false, employee_can_edit_message: false, flow: EMPTY_FLOW,
 };
 
 function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: string | null; org: Organization; onDone: () => void }) {
@@ -243,6 +245,7 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
   if (!/^[a-z0-9-]{2,60}$/.test(f.slug)) errors.push("Path: lowercase letters, numbers and dashes");
   if (f.pixel_id && !/^\d{6,20}$/.test(f.pixel_id)) errors.push("Pixel ID must be 6–20 digits");
   if (f.template === "A" && f.images.length === 0) errors.push("Add at least one service card");
+  if (!flowValid(f.flow)) errors.push("Chat flow: every message needs text or media, and every option needs a label");
   const empList = emps.data ?? [];
   const pubEmps = empList.map((e) => ({ id: e.id, name: e.name, avatar: e.avatar, title: e.title, status: e.status, verified: e.verified }));
   return (
@@ -253,7 +256,7 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
           <Button className="ml-auto" onClick={() => (errors.length ? toast.error(errors[0]) : save.mutate())} disabled={save.isPending} data-testid="builder-save-button">{save.isPending ? "Saving…" : "Save page"}</Button>
         </div>
         <Tabs defaultValue="content">
-          <TabsList className="w-full"><TabsTrigger value="content">Content</TabsTrigger><TabsTrigger value="look">Appearance</TabsTrigger><TabsTrigger value="routing">Routing</TabsTrigger><TabsTrigger value="pixel">Pixel</TabsTrigger></TabsList>
+          <TabsList className="w-full"><TabsTrigger value="content">Content</TabsTrigger><TabsTrigger value="look">Appearance</TabsTrigger><TabsTrigger value="routing">Routing</TabsTrigger><TabsTrigger value="pixel">Pixel</TabsTrigger><TabsTrigger value="flow" data-testid="builder-tab-flow">Chat flow</TabsTrigger></TabsList>
           <TabsContent value="content" className="space-y-3 pt-3">
             <div className="grid grid-cols-2 gap-2">
               {(["A", "B"] as const).map((t) => (
@@ -344,6 +347,9 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
           </TabsContent>
           <TabsContent value="pixel" className="space-y-3 pt-3">
             <PixelManager ids={[...new Set([...(f.pixel_ids ?? []), f.pixel_id].filter(Boolean))]} onChange={(ids) => setF({ ...f, pixel_ids: ids, pixel_id: ids[0] ?? "" })} />
+          </TabsContent>
+          <TabsContent value="flow" className="space-y-3 pt-3">
+            <FlowEditor value={f.flow} onChange={(flow) => setF({ ...f, flow })} />
           </TabsContent>
         </Tabs>
       </div>
@@ -477,6 +483,7 @@ export function AdminSettings() {
   return (
     <div className="max-w-4xl">
       <PageHeader title="Organization settings" subtitle="White-label branding applies across your team workspace and new landing pages." />
+      <div className="mb-5"><IntroVideoCard /></div>
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-3 rounded-2xl border bg-card p-5">
           <div className="space-y-1"><Label>Organization name</Label><Input value={v.name} onChange={(e) => setF({ ...f, name: e.target.value })} data-testid="org-name-input" /></div>
