@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, Logo, Skeleton, ThemeToggle, VerifiedBadge } from "@/components/common";
-import { apiPost } from "@/lib/api";
+import { ApiError, apiPost } from "@/lib/api";
 import { HOME_BY_ROLE, toastErr, useMe, useStaffOrg } from "@/lib/hooks";
 import { endSession } from "@/lib/session";
 import type { Ok, Role } from "@/lib/types";
@@ -24,6 +24,7 @@ const NAV: Record<Exclude<Role, "customer">, NavItem[]> = {
     { to: "/employee/inbox", label: "Inbox", icon: MessagesSquare },
     { to: "/employee/customers", label: "Customers", icon: Contact },
     { to: "/employee/deposits", label: "Deposits", icon: Wallet, feature: "deposits" },
+    { to: "/employee/recharges", label: "Recharges", icon: CreditCard },
     { to: "/employee/analytics", label: "Analytics", icon: BarChart3, feature: "advanced_analytics" },
     { to: "/employee/settings", label: "Settings", icon: Settings },
   ],
@@ -34,6 +35,7 @@ const NAV: Record<Exclude<Role, "customer">, NavItem[]> = {
     { to: "/admin/customers", label: "Customers", icon: Contact },
     { to: "/admin/landing-pages", label: "Landing pages", icon: LayoutTemplate, feature: "landing_builder" },
     { to: "/admin/deposits", label: "Deposit ledger", icon: Wallet, feature: "deposits" },
+    { to: "/admin/recharges", label: "Recharges", icon: CreditCard },
     { to: "/admin/analytics", label: "Analytics", icon: BarChart3, feature: "advanced_analytics" },
     { to: "/admin/broadcasts", label: "Broadcasts", icon: Megaphone, feature: "broadcasts" },
     { to: "/admin/notifications", label: "Notifications", icon: Bell },
@@ -83,7 +85,15 @@ export function RequireRole({ role, children }: { role: Role; children: React.Re
   const me = useMe();
   const loc = useLocation();
   if (me.isLoading) return <div className="p-8"><Skeleton className="h-10 w-64" /><Skeleton className="mt-4 h-64" /></div>;
-  if (me.isError || !me.data) return <Navigate to={`/demo?next=${encodeURIComponent(loc.pathname)}`} replace />;
+  const signedOut = me.error instanceof ApiError && me.error.status === 401;
+  if (!me.data && me.isError && !signedOut) return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center" data-testid="session-reconnecting">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+      <p className="text-sm text-muted-foreground">Reconnecting… you're still signed in.</p>
+      <Button size="sm" variant="outline" onClick={() => me.refetch()} data-testid="session-retry">Retry now</Button>
+    </div>
+  );
+  if (!me.data) return <Navigate to={`/demo?next=${encodeURIComponent(loc.pathname)}`} replace />;
   if (me.data.role !== role) {
     return (
       <div className="flex min-h-screen items-center justify-center p-6">

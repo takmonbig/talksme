@@ -11,7 +11,7 @@ export interface EmployeeStat extends User { open_conversations: number; total_c
 export interface Organization {
   id: string; name: string; slug: string; domain: string; domain_status: string; plan_id: string; billing_cycle: string;
   seats: number; status: string; primary_color: string; accent_color: string; font: string; logo_url: string; banner_url: string;
-  retention_days: number; created_at: string; trial_ends: string | null; features: Record<string, boolean>; intro_video_url: string; intro_enabled: boolean;
+  retention_days: number; created_at: string; trial_ends: string | null; features: Record<string, boolean>; intro_video_url: string; intro_enabled: boolean; verified: boolean;
 }
 export interface OrgRow extends Organization { plan_name: string; employees: number; customers: number; conversations: number; deposits_total: number; mrr: number }
 
@@ -26,7 +26,7 @@ export interface CustomerProfile {
 export interface Attachment { kind: "image" | "video" | "audio" | "file" | "sticker"; name: string; url: string; size: number }
 export interface Conversation {
   id: string; org_id: string; org_name: string; org_color: string; customer_id: string; customer_user_id: string; customer_name: string;
-  customer_phone: string; employee_id: string | null; employee_name: string; employee_avatar: string; employee_status: string; employee_title: string; employee_bio: string; employee_link: string; employee_verified: boolean; employee_phone: string;
+  customer_phone: string; employee_id: string | null; employee_name: string; employee_avatar: string; employee_status: string; employee_title: string; employee_bio: string; employee_link: string; employee_verified: boolean; employee_phone: string; org_verified: boolean;
   landing_page_id: string | null; landing_title: string; last_message: string; last_message_at: string; unread: number;
   archived: boolean; muted: boolean; vip: boolean; follow_up: boolean; blocked: boolean; calls_enabled: boolean; customer_calls_allowed: boolean; typing: boolean; created_at: string;
 }
@@ -55,10 +55,10 @@ export interface DepositEvent {
 export type Routing = "fixed" | "round_robin" | "least_busy" | "manual" | "team";
 export interface LPImage { id: string; url: string; label: string; description: string; default_message: string; employee_id: string | null }
 export interface LandingPageInput {
-  title: string; slug: string; template: "A" | "B"; description: string; cta_text: string; primary_color: string; font: string;
+  title: string; slug: string; template: "A" | "B" | "C"; description: string; cta_text: string; primary_color: string; font: string;
   logo_url: string; banner_url: string; trust_items: string[]; routing: Routing; assigned_employee_ids: string[]; images: LPImage[];
   calls_enabled: boolean; pixel_id: string; pixel_ids: string[]; published: boolean; available_24_7: boolean;
-  default_message: string; auto_send_default: boolean; employee_can_edit_message: boolean; flow: Flow;
+  default_message: string; auto_send_default: boolean; employee_can_edit_message: boolean; flow: Flow; services: RechargeService[]; payment: PaymentConfig;
 }
 export interface LandingPage extends LandingPageInput { id: string; org_id: string; views: number; leads: number; archived: boolean; created_at: string }
 export interface PublicEmployee { id: string; name: string; avatar: string; title: string; status: string; verified: boolean }
@@ -116,10 +116,23 @@ export interface NotifyHealthRow { user_id: string; profile_id: string; kind: "e
 export interface NotifyRemindOut { live: boolean; in_chat: boolean; last_reminded_at: string; message: string }
 export interface PendingNotifyReminder { org_id: string; org_name: string; from_name: string; text: string; at: string }
 
-export interface MenuOption { id: string; label: string }
+export interface MenuOption { id: string; label: string; action?: "reply" | "call" }
 export interface FlowMsg { id: string; text: string; attachment: Attachment | null }
-export interface FlowOption { id: string; label: string; next: string }
+export interface FlowOption { id: string; label: string; next: string; action: "reply" | "call" }
 export interface FlowNode { id: string; title: string; messages: FlowMsg[]; options: FlowOption[]; prompt: string }
 export interface Flow { enabled: boolean; root: string; nodes: FlowNode[] }
 export interface Sticker { id: string; scope: "builtin" | "org" | "mine"; name: string; url: string; owner_id: string }
 export interface IntroOut { enabled: boolean; url: string }
+export interface FlowOptionStat { option_id: string; label: string; count: number; pct: number }
+export interface FlowNodeStat { node_id: string; title: string; prompt: string; shown: number; answered: number; options: FlowOptionStat[] }
+export interface FlowStats { landing_page_id: string; title: string; slug: string; flow_enabled: boolean; chats: number; menus_shown: number; answered: number; response_rate: number; top_option: string; nodes: FlowNodeStat[] }
+export interface RechargeService { id: string; name: string; image: string; brief: string; min_amount: number; max_amount: number; bonus_pct: number; active: boolean }
+export interface PaymentConfig { upi_id: string; payee_name: string; qr_mode: "auto" | "image"; qr_image: string; note: string }
+export interface RechargeCredentials { username: string; password: string; note: string }
+export interface RechargeRequest {
+  id: string; org_id: string; org_name: string; landing_page_id: string; service_id: string; service_name: string; service_image: string;
+  customer_user_id: string; customer_name: string; customer_phone: string; conversation_id: string; employee_id: string | null; employee_name: string;
+  amount: number; bonus_pct: number; bonus_amount: number; total_credit: number; screenshot_url: string; utr: string;
+  status: "pending" | "approved" | "rejected"; reject_reason: string; handled_by_name: string; credentials: RechargeCredentials | null; created_at: string; updated_at: string;
+}
+export interface RechargeSummary { pending: number; approved_today: number; approved_total_amount: number; approved_today_amount: number }

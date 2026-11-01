@@ -13,7 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DemoBadge, ErrorState, MockBadge, PageHeader, Pager, SkeletonGrid, SortHead, StatCard, StatusBadge, useTable } from "@/components/common";
+import { DemoBadge, ErrorState, MockBadge, PageHeader, Pager, SkeletonGrid, SortHead, StatCard, StatusBadge, TalksMeVerified, useTable } from "@/components/common";
+import { Switch } from "@/components/ui/switch";
 import { AnalyticsView } from "@/components/crm/Views";
 import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { compact, dateTime, money, toastErr } from "@/lib/hooks";
@@ -133,6 +134,7 @@ function OrgDetailsDialog({ id, onClose }: { id: string; onClose: () => void }) 
   const nav = useNavigate();
   const refresh = () => { qc.invalidateQueries({ queryKey: ["sa-org-details", id] }); qc.invalidateQueries({ queryKey: ["sa-orgs"] }); };
   const feat = useMutation({ mutationFn: (features: Record<string, boolean>) => apiPatch<OrgRow>(`/superadmin/organizations/${id}`, { features, reason: "Feature entitlements updated" }), onSuccess: () => { toast.success("Features updated"); refresh(); }, onError: toastErr });
+  const verify = useMutation({ mutationFn: (verified: boolean) => apiPatch<OrgRow>(`/superadmin/organizations/${id}`, { verified, reason: verified ? "Verified badge granted" : "Verified badge removed" }), onSuccess: (r) => { toast.success(r.verified ? `${r.name} is now Verified by TalksMe` : "Verified badge removed"); refresh(); }, onError: toastErr });
   const toggleUser = useMutation({ mutationFn: (u: { id: string; active: boolean }) => apiPatch(`/superadmin/users/${u.id}?active=${u.active}`), onSuccess: () => { toast.success("User updated"); refresh(); }, onError: toastErr });
   const o = d.data?.org;
   return (
@@ -140,9 +142,13 @@ function OrgDetailsDialog({ id, onClose }: { id: string; onClose: () => void }) 
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl" data-testid="org-details-dialog">
         <DialogHeader><DialogTitle>{o?.name ?? "Organization"}</DialogTitle><DialogDescription>{o && `${o.slug} · ${o.domain || "no domain"} · ${o.plan_name} · ${o.status} · ${o.employees}/${o.seats} seats`}</DialogDescription></DialogHeader>
         {!d.data ? <SkeletonGrid /> : (
-          <div className="space-y-5 text-sm">
+          <div className="min-w-0 space-y-5 text-sm">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <StatCard label="Customers" value={o!.customers} /><StatCard label="Conversations" value={o!.conversations} /><StatCard label="Deposits" value={money(o!.deposits_total)} /><StatCard label="MRR" value={money(o!.mrr)} />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-500/30 bg-sky-500/5 p-3" data-testid="org-verified-row">
+              <div><p className="font-semibold">Verified by TalksMe badge</p><p className="text-xs text-muted-foreground">Shown on this organization's landing pages and in every customer chat header. Only grant after checking the business.</p></div>
+              <div className="flex items-center gap-2">{o!.verified && <TalksMeVerified />}<Switch checked={!!o!.verified} disabled={verify.isPending} onCheckedChange={(v) => verify.mutate(v)} data-testid="org-verified-switch" /></div>
             </div>
             <div className="rounded-xl border p-3">
               <p className="mb-2 font-semibold">Enabled functions (paid features)</p>
@@ -154,7 +160,7 @@ function OrgDetailsDialog({ id, onClose }: { id: string; onClose: () => void }) 
                 ))}
               </div>
             </div>
-            <div>
+            <div className="min-w-0 overflow-x-auto">
               <p className="mb-2 font-semibold">Admins & employees</p>
               <Table>
                 <TableHeader><TableRow><TableHead>User</TableHead><TableHead>Role</TableHead><TableHead className="text-right">Open</TableHead><TableHead className="text-right">Deposits</TableHead><TableHead /></TableRow></TableHeader>

@@ -4,6 +4,9 @@ import { PixelManager } from "@/components/PixelManager";
 import { NotificationHealthPanel } from "@/components/NotificationHealth";
 import { EMPTY_FLOW, FlowEditor, flowValid } from "@/components/FlowEditor";
 import { IntroVideoCard } from "@/components/IntroFlow";
+import { FlowAnalyticsPanel } from "@/components/FlowAnalytics";
+import { LiveHeroCard } from "@/components/LiveHero";
+import { RechargeEditor, rechargeErrors } from "@/components/recharge/RechargeEditor";
 import { extractPixelId } from "@/lib/pixel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -54,8 +57,8 @@ function PendingTransfers() {
   );
 }
 
-export const AdminDashboard = () => <AnalyticsView endpoint="/analytics" title="Organization dashboard" subtitle="Team, customers, deposits and landing-page performance." extra={<PendingTransfers />} />;
-export const AdminAnalytics = () => <AnalyticsView endpoint="/analytics" title="Organization analytics" subtitle="Employee KPIs, revenue attribution and conversion." />;
+export const AdminDashboard = () => <><LiveHeroCard /><AnalyticsView endpoint="/analytics" title="Organization dashboard" subtitle="Team, customers, deposits and landing-page performance." extra={<PendingTransfers />} /></>;
+export const AdminAnalytics = () => <><AnalyticsView endpoint="/analytics" title="Organization analytics" subtitle="Employee KPIs, revenue attribution and conversion." /><div className="mt-6"><FlowAnalyticsPanel /></div></>;
 function WithNotifyTab({ kind, label, children }: { kind: "employee" | "customer"; label: string; children: React.ReactNode }) {
   return (
     <Tabs defaultValue="list">
@@ -226,7 +229,7 @@ const EMPTY_LP: LandingPageInput = {
   primary_color: "#0284C7", font: "Inter", logo_url: "", banner_url: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1400&q=70",
   trust_items: ["Verified team members", "Secure, encrypted chat", "Replies in under 5 minutes"], routing: "round_robin", assigned_employee_ids: [], images: [],
   calls_enabled: true, pixel_id: "", pixel_ids: [], published: false, available_24_7: false,
-  default_message: "Hello! I am interested in your service. Please share more details.", auto_send_default: false, employee_can_edit_message: false, flow: EMPTY_FLOW,
+  default_message: "Hello! I am interested in your service. Please share more details.", auto_send_default: false, employee_can_edit_message: false, flow: EMPTY_FLOW, services: [], payment: { upi_id: "", payee_name: "", qr_mode: "auto", qr_image: "", note: "" },
 };
 
 function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: string | null; org: Organization; onDone: () => void }) {
@@ -245,6 +248,7 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
   if (!/^[a-z0-9-]{2,60}$/.test(f.slug)) errors.push("Path: lowercase letters, numbers and dashes");
   if (f.pixel_id && !/^\d{6,20}$/.test(f.pixel_id)) errors.push("Pixel ID must be 6–20 digits");
   if (f.template === "A" && f.images.length === 0) errors.push("Add at least one service card");
+  if (f.template === "C") errors.push(...rechargeErrors(f));
   if (!flowValid(f.flow)) errors.push("Chat flow: every message needs text or media, and every option needs a label");
   const empList = emps.data ?? [];
   const pubEmps = empList.map((e) => ({ id: e.id, name: e.name, avatar: e.avatar, title: e.title, status: e.status, verified: e.verified }));
@@ -258,13 +262,14 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
         <Tabs defaultValue="content">
           <TabsList className="w-full"><TabsTrigger value="content">Content</TabsTrigger><TabsTrigger value="look">Appearance</TabsTrigger><TabsTrigger value="routing">Routing</TabsTrigger><TabsTrigger value="pixel">Pixel</TabsTrigger><TabsTrigger value="flow" data-testid="builder-tab-flow">Chat flow</TabsTrigger></TabsList>
           <TabsContent value="content" className="space-y-3 pt-3">
-            <div className="grid grid-cols-2 gap-2">
-              {(["A", "B"] as const).map((t) => (
+            <div className="grid grid-cols-3 gap-2">
+              {(["B", "A", "C"] as const).map((t) => (
                 <button key={t} onClick={() => set("template", t)} data-testid={`builder-template-${t}`} className={cn("rounded-xl border p-3 text-left text-sm transition-colors", f.template === t && "border-primary bg-accent")}>
-                  <b>{t === "B" ? "Type A · Chat Now" : "Type B · Choose service"}</b><p className="text-xs text-muted-foreground">{t === "B" ? "Logo, highlights, banner, one big Chat Now button" : "Service cards (image, name, description), then Start Chat"}</p>
+                  <b>{t === "B" ? "Type A · Chat Now" : t === "A" ? "Type B · Choose service" : "Type C · Recharge"}</b><p className="text-xs text-muted-foreground">{t === "B" ? "Logo, highlights, banner, one big Chat Now button" : t === "A" ? "Service cards (image, name, description), then Start Chat" : "Services with min/max + bonus, UPI QR payment, screenshot verification"}</p>
                 </button>
               ))}
             </div>
+            {f.template === "C" && <RechargeEditor services={f.services ?? []} payment={f.payment} onServices={(v) => set("services", v)} onPayment={(v) => set("payment", v)} />}
             <div className="space-y-1"><Label>Title</Label><Input value={f.title} onChange={(e) => set("title", e.target.value)} data-testid="builder-title-input" /></div>
             <div className="space-y-1"><Label>Path</Label><div className="flex items-center gap-1 text-sm"><span className="text-muted-foreground">{org.domain || "your-domain"}/</span><Input value={f.slug} onChange={(e) => set("slug", e.target.value.toLowerCase())} data-testid="builder-slug-input" /></div></div>
             <div className="space-y-1"><Label>Description</Label><Textarea value={f.description} onChange={(e) => set("description", e.target.value)} rows={2} data-testid="builder-description-input" /></div>
@@ -350,6 +355,7 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
           </TabsContent>
           <TabsContent value="flow" className="space-y-3 pt-3">
             <FlowEditor value={f.flow} onChange={(flow) => setF({ ...f, flow })} />
+            {id && <FlowAnalyticsPanel landingPageId={id} />}
           </TabsContent>
         </Tabs>
       </div>
@@ -362,7 +368,7 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
           </div>
         </div>
         <div className={cn("mx-auto overflow-hidden border bg-slate-50 shadow-2xl transition-[max-width] duration-300", device === "mobile" ? "h-[720px] max-w-[390px] rounded-[40px] border-8 border-slate-900" : "h-[680px] max-w-full rounded-2xl")} data-testid="builder-preview">
-          <div className="h-full overflow-y-auto"><LandingRender page={f} orgName={org.name} employees={pubEmps} mobile={device === "mobile"} onChat={() => toast("Preview only — publish and open the live page to start a chat")} /></div>
+          <div className="h-full overflow-y-auto"><LandingRender page={f} orgName={org.name} verified={org.verified} employees={pubEmps} mobile={device === "mobile"} onChat={() => toast("Preview only — publish and open the live page to start a chat")} /></div>
         </div>
       </div>
     </div>

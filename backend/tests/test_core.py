@@ -4,15 +4,13 @@ import uuid
 import httpx
 import pytest
 
-from tests.conftest import api_url
+from tests.conftest import api_url, login_header
 
 PW = "Demo@123"
 
 
 def login(email: str) -> dict:
-    r = httpx.post(api_url("/auth/login"), json={"email": email, "password": PW})
-    assert r.status_code == 200, r.text
-    return {"Cookie": f"omni_session={r.cookies['omni_session']}"}
+    return login_header(email)
 
 
 def get(path, h):
@@ -73,7 +71,7 @@ def test_new_visitor_gets_single_conversation_on_retry():
     phone = str(7000000000 + uuid.uuid4().int % 999999999)
     body = {"name": "New Visitor", "country_code": "+91", "phone": phone}
     r1 = httpx.post(api_url("/public/landing/talksme/support/start"), json=body)
-    h = {"Cookie": f"omni_session={r1.cookies['omni_session']}"}
+    h = {"Cookie": f"omni_customer={r1.cookies['omni_customer']}"}
     r2 = httpx.post(api_url("/public/landing/talksme/support/start"), json=body, headers=h)
     assert r1.json()["conversation_id"] == r2.json()["conversation_id"]
 

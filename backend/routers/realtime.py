@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from lib.auth import current_user, optional_user, require, set_session
 from lib.conv import can_access
 from lib.db import db
-from lib.push import push_bg
+from lib.push import ring_bg
 from lib.realtime import hub, publish
 from lib.util import audit, iso, new_id, now, now_iso
 from models.schemas import Ok, StartChatOut, User, VerifyIn
@@ -67,14 +67,17 @@ async def ws_endpoint(ws: WebSocket):
                     if prof.get("calls_allowed") is False:
                         await ws.send_json({"type": "call", "conversation_id": c["id"], "action": "not_allowed"})
                         continue
+                if not peer and action == "offer":
+                    await ws.send_json({"type": "call", "conversation_id": c["id"], "action": "unavailable"})
+                    continue
                 if peer:
                     ev = {"type": "call", "conversation_id": c["id"], "action": action, "payload": msg.get("payload"),
                           "from_name": user["name"], "from_avatar": user.get("avatar", "")}
                     if action == "offer":
                         await hub.ring(c["id"], peer, ev)
                         url = f"/chat/{c['id']}" if user["role"] != "customer" else f"/employee/inbox?c={c['id']}"
-                        push_bg({peer}, {"title": f"📞 Incoming call · {user['name']}", "body": "Tap to answer the audio call",
-                                         "url": url, "tag": f"call-{c['id']}", "call": True}, only_if_not_visible=False)
+                        ring_bg(c["id"], peer, {"title": f"📞 Incoming call · {user['name']}", "body": "Audio call on talksme.in. Tap to answer.",
+                                                "url": url, "tag": f"call-{c['id']}", "call": True, "cid": c["id"]}, user["name"])
                     elif action in ("answer", "reject", "end", "busy"):
                         await hub.stop_ring(c["id"])
                     await hub.send({peer}, ev)

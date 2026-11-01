@@ -56,6 +56,11 @@ async def start_chat(org_slug: str, slug: str, body: StartChatIn, response: Resp
     # An already-authenticated customer with this phone is an authorized session.
     # Returning visitor on this device (session cookie): straight back into chat, no login of any kind.
     if viewer and viewer["role"] == "customer" and (not phone or viewer.get("phone") == phone):
+        if body.name and viewer.get("guest") and viewer["name"].startswith("Guest ") and body.name.strip() != viewer["name"]:
+            viewer = {**viewer, "name": body.name.strip()}  # guest told us their name on the name popup
+            await db.users.update_one({"id": viewer["id"]}, {"$set": {"name": viewer["name"]}})
+            await db.customer_profiles.update_many({"user_id": viewer["id"]}, {"$set": {"name": viewer["name"]}})
+            await db.conversations.update_many({"customer_user_id": viewer["id"]}, {"$set": {"customer_name": viewer["name"]}})
         return await done(viewer)
     existing = await db.users.find_one({"phone": phone, "role": "customer"}, {"_id": 0}) if phone else None
     if existing:

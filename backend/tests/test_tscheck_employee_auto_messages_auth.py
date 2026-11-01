@@ -1,15 +1,11 @@
 """Employee auto-messages settings: customer role must be rejected from the employee-only endpoint."""
 import httpx
 
-from tests.conftest import api_url
-
-PW = "Demo@123"
+from tests.conftest import api_url, login_header
 
 
 def login(email: str) -> dict:
-    r = httpx.post(api_url("/auth/login"), json={"email": email, "password": PW})
-    assert r.status_code == 200, r.text
-    return {"Cookie": f"omni_session={r.cookies['omni_session']}"}
+    return login_header(email)
 
 
 def test_customer_cannot_get_employee_auto_messages():

@@ -10,7 +10,9 @@ export function useMe() {
   return useQuery({
     queryKey: ["me"],
     queryFn: () => apiGet<User>("/auth/me"),
-    retry: false,
+    // only a real 401 means "signed out"; network blips / 5xx (phone waking up, server restart) are retried, never a logout
+    retry: (n, e) => !(e instanceof ApiError && (e.status === 401 || e.status === 403)) && n < 6,
+    retryDelay: (n) => Math.min(1000 * 2 ** n, 8000),
     staleTime: 60_000,
   });
 }

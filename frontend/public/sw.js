@@ -1,5 +1,5 @@
 // talksme.in PWA service worker: app-shell cache + offline fallback. API calls are never cached.
-const CACHE = "talksme-shell-v2";
+const CACHE = "talksme-shell-v3";
 const DEV = new URL(self.location.href).searchParams.has("dev");
 const SHELL = ["/", "/chat", "/manifest.webmanifest"];
 
@@ -29,14 +29,25 @@ self.addEventListener("fetch", (e) => {
 self.addEventListener("push", (e) => {
   let d = { title: "talksme.in", body: "You have a new message", url: "/chat", tag: "talksme" };
   try { d = { ...d, ...e.data.json() }; } catch (_) { /* plain push */ }
-  e.waitUntil(self.registration.showNotification(d.title, {
+  const opts = {
     body: d.body, icon: "/apple-touch-icon.png", badge: "/favicon-32x32.png", tag: d.tag, renotify: true, data: d.url,
-    requireInteraction: !!d.call, vibrate: d.call ? [500, 250, 500, 250, 500, 250, 500] : [150, 80, 150],
-  }));
+    timestamp: Date.now(), silent: false,
+    requireInteraction: !!d.call,
+    // long ring-like vibration for calls (re-sent every few seconds by the server while ringing)
+    vibrate: d.call ? [800, 300, 800, 300, 800, 300, 800, 300, 800] : [200, 100, 200],
+    actions: d.call ? [{ action: "answer", title: "📞 Answer" }, { action: "decline", title: "Decline" }] : [{ action: "open", title: "Reply" }],
+  };
+  e.waitUntil((async () => {
+    // tell open tabs too (they play the ringtone / sound themselves)
+    const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    list.forEach((c) => c.postMessage({ type: "push", data: d }));
+    await self.registration.showNotification(d.title, opts);
+  })());
 });
 
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
+  if (e.action === "decline") return; // caller sees "no answer" after the ring timeout
   const url = new URL(e.notification.data || "/chat", self.location.origin).href;
   e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
     const same = list.find((c) => new URL(c.url).origin === self.location.origin);

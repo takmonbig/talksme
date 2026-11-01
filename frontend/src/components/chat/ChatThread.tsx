@@ -7,12 +7,12 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Check, CheckCheck, Clock, CornerUpLeft, FileText, Image as ImageIcon, Mic, Paperclip, Search, SendHorizontal,
   Smile, Square, Trash2, Video, X, AlertCircle, Lock, Zap,
-  BadgeCheck,
+  BadgeCheck, Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Avatar, Skeleton } from "@/components/common";
+import { Avatar, Skeleton, TalksMeVerified } from "@/components/common";
 import { CallButton, startCall } from "@/components/chat/CallModal";
 import { InstallBanner, NotifyBanner } from "@/components/AppBanners";
 import { BackupPhoneCard } from "@/components/chat/BackupPhone";
@@ -144,7 +144,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="chat-thread">
-      <div className={cn("flex shrink-0 items-center gap-3 border-b bg-card/80 px-3 backdrop-blur-xl", viewer === "customer" && conv.employee_name ? (conv.employee_phone ? "h-[92px]" : "h-[76px]") : "h-16")}>
+      <div className={cn("flex shrink-0 items-center gap-3 border-b bg-card/80 px-3 backdrop-blur-xl", viewer === "customer" && conv.employee_name ? (conv.employee_phone || conv.org_verified ? "h-auto min-h-[76px] py-1.5" : "h-[76px]") : "h-16")}>
         {onBack && <Button variant="ghost" size="icon" onClick={onBack} data-testid="chat-back-button"><ArrowLeft className="h-4 w-4" /></Button>}
         {viewer === "customer" && conv.employee_name ? (
           <button className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left transition-colors duration-150 hover:bg-muted/60" onClick={() => setProfile(true)} data-testid="chat-employee-profile-trigger">
@@ -153,6 +153,7 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
               <span className="flex items-center gap-1 truncate text-lg font-bold leading-tight" data-testid="chat-header-title">{conv.employee_name}{conv.employee_verified && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />}</span>
               <span className="block truncate text-xs font-medium text-muted-foreground" data-testid="chat-header-employee-details">{[conv.employee_title, conv.org_name].filter(Boolean).join(" · ")}</span>
               {conv.employee_phone && <span className="block truncate text-[11px] font-semibold text-foreground/80" data-testid="chat-header-employee-phone">📞 {conv.employee_phone}</span>}
+              {conv.org_verified && <TalksMeVerified className="mt-0.5 px-1.5 text-[10px]" />}
               <span className="block truncate text-[11px]" data-testid="chat-header-subtitle">{conv.typing || typingQ.data ? <span className="text-primary">typing…</span> : <span className={conv.employee_status === "online" ? "text-emerald-600" : "text-muted-foreground"}>{conv.employee_status === "online" ? "● Online" : conv.employee_status} · tap to view profile</span>}</span>
             </span>
           </button>
@@ -174,6 +175,14 @@ export function ChatThread({ conv, viewer, onBack, headerExtra, title, subtitle,
         {viewer !== "admin" && <CallButton disabled={!conv.calls_enabled || disabled} onClick={() => startCall({ cid: conv.id, name: peerName, avatar: viewer === "customer" ? conv.employee_avatar : undefined })} />}
         {headerExtra}
       </div>
+      {viewer === "customer" && conv.calls_enabled && conv.employee_id && !disabled && (
+        <button onClick={() => startCall({ cid: conv.id, name: peerName, avatar: conv.employee_avatar })} data-testid="chat-call-now-bar"
+          className="group mx-3 mt-2 flex items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-3 py-2 text-left text-white shadow-md transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.99]">
+          <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20"><span className="animate-pulse-ring absolute inset-0 rounded-full bg-white/30" /><Phone className="relative h-4 w-4" /></span>
+          <span className="min-w-0 flex-1"><span className="block text-sm font-bold">Call now, free</span><span className="block truncate text-[11px] text-white/85">Talk to {peerName} directly. No phone number needed.</span></span>
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700 transition-transform duration-200 group-hover:scale-105">Call</span>
+        </button>
+      )}
       {viewer === "customer" && <InstallBanner />}
 
       <div className="relative min-h-0 flex-1">

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
-from lib.auth import PUBLIC_USER, clear_session, current_user, set_session, verify_pw
+from lib.auth import PUBLIC_USER, clear_session, current_user, optional_user, set_session, verify_pw
 from lib.db import db
 from lib.util import audit
 from lib.auth import hash_pw
@@ -34,8 +34,9 @@ async def login(body: LoginIn, response: Response, request: Request):
 
 
 @router.post("/auth/logout", response_model=Ok)
-async def logout(response: Response):
-    clear_session(response)
+async def logout(request: Request, response: Response):
+    user = await optional_user(request)
+    clear_session(response, request, user["role"] if user else None)
     return Ok()
 
 

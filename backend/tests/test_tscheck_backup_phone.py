@@ -12,9 +12,9 @@ def new_guest() -> httpx.Client:
     c = httpx.Client(timeout=30.0)
     r = c.post(api_url("/public/landing/talksme/support/start"), json={})
     assert r.status_code == 200, r.text
-    token = r.cookies.get("omni_session")
-    assert token, "no omni_session cookie set by /start"
-    c.headers["Cookie"] = f"omni_session={token}"
+    token = r.cookies.get("omni_customer")
+    assert token, "no omni_customer cookie set by /start"
+    c.headers["Cookie"] = f"omni_customer={token}"
     return c
 
 

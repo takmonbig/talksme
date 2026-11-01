@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, MockBadge, PageHeader, StatusBadge, VerifiedBadge } from "@/components/common";
 import { InboxWorkspace } from "@/components/InboxWorkspace";
+import { LiveHeroCard } from "@/components/LiveHero";
 import { AnalyticsView, CustomersView, DepositsView } from "@/components/crm/Views";
 import { apiGet, apiPatch } from "@/lib/api";
 import { dateTime, toastErr, useMe } from "@/lib/hooks";
@@ -35,7 +36,7 @@ function MyTransfers() {
 
 export function EmployeeDashboard() {
   const me = useMe();
-  return <AnalyticsView endpoint="/analytics" title={`Good to see you, ${me.data?.name.split(" ")[0] ?? ""}`} subtitle="Your assigned conversations, customers and recorded deposits." showEmployees extra={<MyTransfers />} />;
+  return <><LiveHeroCard /><AnalyticsView endpoint="/analytics" title={`Good to see you, ${me.data?.name.split(" ")[0] ?? ""}`} subtitle="Your assigned conversations, customers and recorded deposits." showEmployees extra={<MyTransfers />} /></>;
 }
 export const EmployeeInbox = () => <InboxWorkspace mode="employee" />;
 export const EmployeeCustomers = () => <CustomersView />;

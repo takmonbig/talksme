@@ -1,4 +1,4 @@
-import { ArrowDown, GitBranch, MessageSquarePlus, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, GitBranch, MessageSquarePlus, Phone, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +27,23 @@ export function FlowEditor({ value, onChange }: { value: Flow | undefined; onCha
   const addStepFor = (nodeId: string, optId: string, label: string) => {
     const s = newNode(label);
     set({ nodes: [...nodes.map((n) => (n.id === nodeId ? { ...n, options: n.options.map((o) => (o.id === optId ? { ...o, next: s.id } : o)) } : n)), s] });
+  };
+  /** Renaming an option also renames its auto-created reply step, so the editor stays readable. */
+  const renameOption = (nodeId: string, optId: string, label: string) => {
+    const opt = nodes.find((n) => n.id === nodeId)?.options.find((o) => o.id === optId);
+    set({ nodes: nodes.map((n) => {
+      if (n.id === nodeId) return { ...n, options: n.options.map((o) => (o.id === optId ? { ...o, label } : o)) };
+      if (opt?.next === n.id && (/^Reply \d+$/.test(n.title) || n.title === opt.label)) return { ...n, title: label };
+      return n;
+    }) });
+  };
+  /** A normal option always gets its own reply step right away, so tapping it never dead-ends. "Call now" starts an audio call. */
+  const addOption = (nodeId: string, action: "reply" | "call") => {
+    const optId = uid();
+    if (action === "call") return set({ nodes: nodes.map((n) => (n.id === nodeId ? { ...n, options: [...n.options, { id: optId, label: "📞 Call now", next: "", action }] } : n)) });
+    const s = newNode(`Reply ${nodes.length}`);
+    s.messages = [{ id: uid(), text: "", attachment: null }];
+    set({ nodes: [...nodes.map((n) => (n.id === nodeId ? { ...n, options: [...n.options, { id: optId, label: "", next: s.id, action }] } : n)), s] });
   };
   const ordered = [...nodes].sort((a, b) => (a.id === flow.root ? -1 : b.id === flow.root ? 1 : 0));
   return (
@@ -62,17 +79,22 @@ export function FlowEditor({ value, onChange }: { value: Flow | undefined; onCha
               {n.options.length > 0 && <Input className="h-7 text-xs" value={n.prompt} maxLength={200} onChange={(e) => setNode(n.id, { prompt: e.target.value })} placeholder="Question above the buttons" data-testid="flow-prompt-input" />}
               {n.options.map((o) => (
                 <div key={o.id} className="flex flex-wrap items-center gap-1.5" data-testid="flow-option">
-                  <Input className="h-7 w-36 text-xs" value={o.label} maxLength={40} placeholder="e.g. Deposit" onChange={(e) => setNode(n.id, { options: n.options.map((x) => (x.id === o.id ? { ...x, label: e.target.value } : x)) })} data-testid="flow-option-label" />
+                  <Input className="h-7 w-36 text-xs" value={o.label} maxLength={40} placeholder="e.g. Deposit" onChange={(e) => renameOption(n.id, o.id, e.target.value)} data-testid="flow-option-label" />
                   <ArrowDown className="h-3 w-3 -rotate-90 text-muted-foreground" />
-                  <select className="h-7 rounded-md border bg-background px-1.5 text-xs" value={o.next} onChange={(e) => (e.target.value === "__new" ? addStepFor(n.id, o.id, o.label || "New step") : setNode(n.id, { options: n.options.map((x) => (x.id === o.id ? { ...x, next: e.target.value } : x)) }))} data-testid="flow-option-next">
+                  {o.action === "call" ? <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400" data-testid="flow-option-call-tag">Starts an audio call with the employee</span> : <select className="h-7 rounded-md border bg-background px-1.5 text-xs" value={o.next} onChange={(e) => (e.target.value === "__new" ? addStepFor(n.id, o.id, o.label || "New step") : setNode(n.id, { options: n.options.map((x) => (x.id === o.id ? { ...x, next: e.target.value } : x)) }))} data-testid="flow-option-next">
                     <option value="">End (employee takes over)</option>
                     {nodes.filter((x) => x.id !== n.id && x.id !== flow.root).map((x) => <option key={x.id} value={x.id}>{`→ ${x.title || "Untitled step"}`}</option>)}
                     <option value="__new">+ New step…</option>
-                  </select>
+                  </select>}
                   <Button size="icon-sm" variant="ghost" onClick={() => setNode(n.id, { options: n.options.filter((x) => x.id !== o.id) })} data-testid="flow-option-delete"><Trash2 className="h-3 w-3" /></Button>
                 </div>
               ))}
-              {n.options.length < 10 && <Button size="xs" variant="ghost" onClick={() => setNode(n.id, { options: [...n.options, { id: uid(), label: "", next: "" }] })} data-testid="flow-option-add"><Plus className="h-3 w-3" /> Add option</Button>}
+              {n.options.length < 10 && (
+                <div className="flex flex-wrap gap-1.5">
+                  <Button size="xs" variant="ghost" onClick={() => addOption(n.id, "reply")} data-testid="flow-option-add"><Plus className="h-3 w-3" /> Add option (with its own reply)</Button>
+                  <Button size="xs" variant="ghost" className="text-emerald-700 dark:text-emerald-400" onClick={() => addOption(n.id, "call")} data-testid="flow-option-add-call"><Phone className="h-3 w-3" /> Add "Call now" button</Button>
+                </div>
+              )}
             </div>
           </div>
         );

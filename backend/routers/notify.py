@@ -70,7 +70,8 @@ async def push_key():
 
 @router.post("/push/subscribe", response_model=Ok)
 async def push_subscribe(body: PushSubscriptionIn, user: dict = Depends(current_user)):
-    await db.push_subscriptions.update_one({"endpoint": body.endpoint},
+    # one browser can be signed in as staff AND as a customer (separate cookies) -> one subscription row per (device, user)
+    await db.push_subscriptions.update_one({"endpoint": body.endpoint, "user_id": user["id"]},
                                            {"$set": {"endpoint": body.endpoint, "keys": body.keys.model_dump(), "user_id": user["id"], "updated_at": now_iso()}},
                                            upsert=True)
     await db.users.update_one({"id": user["id"]}, {"$set": {"notify_push": True}})

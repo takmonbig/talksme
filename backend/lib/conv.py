@@ -5,7 +5,8 @@ from typing import Optional
 from fastapi import HTTPException
 
 from lib.db import db
-from lib.flow import post_bot_messages, start_flow
+from lib.flow import flow_sig, post_bot_messages, start_flow
+from lib.push import push_bg
 from lib.util import iso, new_id, now, now_iso
 
 
@@ -62,6 +63,7 @@ async def shape(user: dict, convs: list[dict]) -> list[dict]:
             "employee_link": emp.get("profile_link", ""),
             "employee_verified": bool(emp.get("verified")),
             "employee_phone": emp.get("display_phone", "") if emp.get("show_phone") else "",
+            "org_verified": bool(orgs.get(c["org_id"], {}).get("verified")),
             "customer_name": prof.get("name", c["customer_name"]),
             "unread": c.get("unread_customer" if is_cust else "unread_employee", 0),
             "archived": user["id"] in c.get("archived_by", []),
@@ -117,7 +119,14 @@ async def open_conversation(user: dict, lp: dict, preferred: Optional[str]) -> s
     existing = await db.conversations.find_one({"customer_id": prof["id"], "landing_page_id": lp["id"]}, {"_id": 0})
     if existing:
         await db.conversations.update_one({"id": existing["id"]}, {"$pull": {"archived_by": user["id"]}})
-        await send_auto_messages(existing, "return")
+        # flow added/changed since this chat last ran it -> run it now (returning visitors see the current flow)
+        sig = flow_sig(lp)
+        if sig and existing.get("flow_sig") != sig and await start_flow(existing, lp):
+            await db.conversations.update_one({"id": existing["id"]}, {"$set": {"flow_sig": sig}})
+            from lib.realtime import publish  # local import: lib.realtime imports this module
+            await publish(existing, {"type": "message"})
+        else:
+            await send_auto_messages(existing, "return")
         return existing["id"]
     emp_id = await pick_employee(lp, preferred or prof.get("assigned_employee_id"))
     emp = await db.users.find_one({"id": emp_id}, {"_id": 0, "name": 1}) if emp_id else None
@@ -139,8 +148,11 @@ async def open_conversation(user: dict, lp: dict, preferred: Optional[str]) -> s
                                       "text": f"Connected to {emp['name']}" if emp else "You're in the queue — the next available associate will reply shortly.",
                                       "attachment": None, "reply_to": None, "reply_preview": "", "status": "read",
                                       "created_at": t, "idempotency_key": new_id(), "hidden_for": []})
-        if not await start_flow(conv, lp):
+        if await start_flow(conv, lp):
+            await db.conversations.update_one({"id": conv["id"]}, {"$set": {"flow_sig": flow_sig(lp)}})
+        else:
             await send_auto_messages(conv, "welcome")
+        await notify_new_chat(conv, emp_id)
         if not user.get("phone") and not user.get("backup_skipped"):
             await db.messages.insert_one({"id": new_id(), "conversation_id": conv["id"], "org_id": org_id, "sender_role": "system",
                                           "sender_id": None, "sender_name": "talksme.in", "kind": "phone_request",
@@ -169,3 +181,17 @@ async def send_auto_messages(c: dict, kind: str) -> None:
         items = [{"text": cfg["return_text"]}]
     if items and await post_bot_messages(c, items) and kind == "return":
         await db.conversations.update_one({"id": c["id"]}, {"$set": {"last_return_auto_at": now_iso()}})
+
+
+async def notify_new_chat(c: dict, emp_id: Optional[str]) -> None:
+    """A new customer just arrived: ping the assigned employee (or, if queued, the org's admins + online employees) right away."""
+    from lib.realtime import hub  # local import: lib.realtime imports this module
+    if emp_id:
+        uids = {emp_id}
+    else:
+        uids = {u["id"] async for u in db.users.find({"org_id": c["org_id"], "active": {"$ne": False}, "$or": [{"role": "admin"}, {"role": "employee", "status": "online"}]}, {"_id": 0, "id": 1})}
+    if not uids:
+        return
+    await hub.send(uids, {"type": "new_chat", "conversation_id": c["id"], "from_name": c["customer_name"], "payload": {"landing": c.get("landing_title", "")}})
+    push_bg(uids, {"title": f"🆕 New customer · {c['customer_name']}", "body": f"Started a chat from {c.get('landing_title') or 'your landing page'}. Reply now!",
+                   "url": f"/employee/inbox?c={c['id']}" if emp_id else "/admin/conversations", "tag": f"new-{c['id']}"}, only_if_not_visible=False)

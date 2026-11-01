@@ -3,6 +3,7 @@ import { Link, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState, Logo } from "@/components/common";
 import { CallManager } from "@/components/chat/CallModal";
+import { RechargeQueuePage } from "@/components/recharge/RechargeQueue";
 import { useMe } from "@/lib/hooks";
 import { useRealtime } from "@/lib/realtime";
 import { syncPushSubscription } from "@/lib/pwa";
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="inbox" element={<EmployeeInbox />} />
         <Route path="customers" element={<EmployeeCustomers />} />
         <Route path="deposits" element={<EmployeeDeposits />} />
+        <Route path="recharges" element={<RechargeQueuePage />} />
         <Route path="analytics" element={<EmployeeAnalytics />} />
         <Route path="settings" element={<EmployeeSettings />} />
       </Route>
@@ -70,6 +72,7 @@ export default function App() {
         <Route path="landing-pages" element={<AdminLandingPages />} />
         <Route path="conversations" element={<AdminConversations />} />
         <Route path="deposits" element={<AdminDeposits />} />
+        <Route path="recharges" element={<RechargeQueuePage />} />
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="broadcasts" element={<AdminBroadcasts />} />
         <Route path="notifications" element={<AdminNotifications />} />

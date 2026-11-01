@@ -9,6 +9,7 @@ import { apiGet, apiPost } from "@/lib/api";
 import { onRealtime, wsSend } from "@/lib/realtime";
 import { showLocalNotification } from "@/lib/pwa";
 import { startRing, stopRing } from "@/lib/sound";
+import { setCallActive } from "@/lib/callState";
 
 type Phase = "idle" | "ringing" | "incoming" | "connecting" | "connected";
 interface Peer { cid: string; name: string; avatar?: string }
@@ -23,6 +24,8 @@ const loadAgora = async () => {
     agora = (await import("agora-rtc-sdk-ng")).default;
     agora.setLogLevel(3); // warnings+errors only
     agora.disableLogUpload();
+    // mobile browsers can block remote audio until the user taps: show a "tap to hear" button instead of silence
+    agora.onAutoplayFailed = () => window.dispatchEvent(new Event("talksme-autoplay-blocked"));
   }
   return agora;
 };
@@ -40,6 +43,10 @@ export function CallManager() {
   const client = useRef<Client | null>(null);
   const mic = useRef<MicTrack | null>(null);
   const caller = useRef(false);
+  const [needTap, setNeedTap] = useState(false);
+  const remote = useRef<{ play: () => void } | null>(null);
+  useEffect(() => { setCallActive(phase !== "idle"); if (phase === "idle") setNeedTap(false); }, [phase]);
+  useEffect(() => { const f = () => setNeedTap(true); window.addEventListener("talksme-autoplay-blocked", f); return () => window.removeEventListener("talksme-autoplay-blocked", f); }, []);
   const st = useRef({ phase, peer, secs });
   st.current = { phase, peer, secs };
 
@@ -55,7 +62,7 @@ export function CallManager() {
     c?.removeAllListeners(); c?.leave().catch(() => undefined);
     setPhase("idle"); setPeer(null); setSecs(0); setMuted(false);
   };
-  const signal = (action: string, payload?: unknown) => st.current.peer && wsSend({ type: "call", conversation_id: st.current.peer.cid, action, payload });
+  const signal = (action: string, payload?: unknown) => !!st.current.peer && wsSend({ type: "call", conversation_id: st.current.peer.cid, action, payload });
 
   /** Join the conversation's Agora channel and publish the microphone. */
   const joinAudio = async (cid: string) => {
@@ -74,6 +81,7 @@ export function CallManager() {
       if (type !== "audio" || client.current !== c) return;
       await c.subscribe(u, "audio");
       u.audioTrack?.play();
+      remote.current = u.audioTrack ?? null;
       setPhase("connected");
     });
     c.on("user-joined", () => { if (client.current === c) setPhase("connected"); }); // both sides are in the call
@@ -101,12 +109,13 @@ export function CallManager() {
       caller.current = true; setPeer(p); st.current.peer = p; setPhase("ringing");
       try {
         await joinAudio(p.cid); // caller waits in the channel so audio starts the moment the other side accepts
-        if ((st.current.phase as Phase) === "ringing") signal("offer");
+        if ((st.current.phase as Phase) === "ringing" && !signal("offer")) { toast.error("You're offline. Reconnecting… please try the call again in a moment."); cleanup(); }
       } catch { cleanup(); }
     };
     const off = onRealtime(async (e) => {
       if (e.type !== "call") return;
       const cur = st.current;
+      if (e.action === "unavailable") { toast.error("No team member is assigned to this chat yet. Send a message and you'll be connected shortly."); cleanup(); return; }
       if (e.action === "not_allowed") { toast.error("Calling isn't enabled for this chat. Please send a message instead."); cleanup(); return; }
       if (e.action === "offer") {
         if (cur.phase !== "idle") { if (cur.peer?.cid !== e.conversation_id) wsSend({ type: "call", conversation_id: e.conversation_id, action: "busy" }); return; }
@@ -182,6 +191,7 @@ export function CallManager() {
             <p className="mt-1 text-sm text-slate-400" data-testid="call-status">
               {phase === "incoming" ? "Incoming audio call…" : phase === "ringing" ? "Ringing…" : phase === "connecting" ? "Connecting…" : `Connected · ${fmt}`}
             </p>
+            {needTap && phase === "connected" && <button onClick={() => { remote.current?.play(); setNeedTap(false); }} className="mt-4 rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white" data-testid="call-tap-to-hear">🔊 Tap to hear the call</button>}
             <div className="mt-8 flex items-center justify-center gap-4">
               {phase === "incoming" ? (
                 <>

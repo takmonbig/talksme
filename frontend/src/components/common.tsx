@@ -7,6 +7,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LOGO } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
+/** Platform-issued trust badge for organizations approved by the TalksMe Super Admin. */
+export function TalksMeVerified({ className, dark }: { className?: string; dark?: boolean }) {
+  return (
+    <span className={cn("inline-flex w-fit items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold", dark ? "border-sky-300/40 bg-sky-400/15 text-sky-100" : "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300", className)} title="This business has been verified by TalksMe" data-testid="talksme-verified-badge">
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden><path fill="currentColor" d="M12 1.5l2.6 1.9 3.2-.2 1 3.1 2.6 1.9-1 3.1 1 3.1-2.6 1.9-1 3.1-3.2-.2L12 22.5l-2.6-1.9-3.2.2-1-3.1L2.6 15.8l1-3.1-1-3.1 2.6-1.9 1-3.1 3.2.2z" opacity=".25"/><path fill="currentColor" d="M10.6 15.6l-3.2-3.2 1.4-1.4 1.8 1.8 4.6-4.6 1.4 1.4z"/></svg>
+      Verified by TalksMe
+    </span>
+  );
+}
+
 export function Logo({ className, compact }: { className?: string; compact?: boolean }) {
   return (
     <div className={cn("flex items-center gap-2", className)} data-testid="brand-logo">

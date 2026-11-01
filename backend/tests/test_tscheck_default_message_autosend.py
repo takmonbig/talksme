@@ -4,16 +4,13 @@ import uuid
 
 import httpx
 
-from tests.conftest import api_url
+from tests.conftest import api_url, login_header
 
-PW = "Demo@123"
 SUFFIX = uuid.uuid4().hex[:8]
 
 
 def login(email: str) -> dict:
-    r = httpx.post(api_url("/auth/login"), json={"email": email, "password": PW})
-    assert r.status_code == 200, r.text
-    return {"Cookie": f"omni_session={r.cookies['omni_session']}"}
+    return login_header(email)
 
 
 def make_lp(h: dict, auto_send: bool) -> dict:
@@ -41,7 +38,7 @@ def test_prefill_without_autosend_returns_text_not_sent():
         assert body["prefill"] == "tscheck default message api test"
         # no customer message was created
         cid = body["conversation_id"]
-        guest_h = {"Cookie": f"omni_session={r.cookies['omni_session']}"}
+        guest_h = {"Cookie": f"omni_customer={r.cookies['omni_customer']}"}
         msgs = httpx.get(api_url(f"/conversations/{cid}/messages"), headers=guest_h).json()
         assert not any(m["sender_role"] == "customer" for m in msgs)
     finally:
@@ -57,7 +54,7 @@ def test_autosend_posts_exactly_once_even_on_repeat_start():
         body1 = r1.json()
         assert body1["prefill"] == ""  # auto-sent, nothing left to prefill
         cid = body1["conversation_id"]
-        guest_h = {"Cookie": f"omni_session={r1.cookies['omni_session']}"}
+        guest_h = {"Cookie": f"omni_customer={r1.cookies['omni_customer']}"}
 
         # hitting /start again on the same session must not duplicate the message
         r2 = httpx.post(api_url("/public/landing/talksme/" + lp["slug"] + "/start"), json={}, headers=guest_h)

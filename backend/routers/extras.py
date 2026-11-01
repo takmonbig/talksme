@@ -7,7 +7,7 @@ from lib.db import db
 from lib.flow import send_node
 from lib.realtime import publish
 from lib.util import audit, new_id, now_iso
-from models.schemas import IntroOut, MenuChoiceIn, Message, Ok, Sticker, StickerIn
+from models.schemas import FlowNodeStat, FlowOptionStat, FlowStats, IntroOut, MenuChoiceIn, Message, Ok, Sticker, StickerIn
 
 router = APIRouter()
 chat_user = require("customer", "employee", "admin")
@@ -83,3 +83,55 @@ async def intro_reset(user: dict = Depends(require("admin"))):
     await db.organizations.update_one({"id": user["org_id"]}, {"$set": {"intro_video_url": ""}})
     await audit(user, "org.intro_video_reset", f"org:{user['org_id']}", user["org_id"])
     return Ok(message="Using the TalksMe default video")
+
+
+# ---------- Flow analytics: which menu options customers tap ----------
+async def _flow_stats(lp: dict) -> FlowStats:
+    flow = lp.get("flow") or {}
+    node_meta = {n["id"]: n for n in flow.get("nodes", [])}
+    cids = await db.conversations.distinct("id", {"landing_page_id": lp["id"]})
+    menus = await db.messages.find({"conversation_id": {"$in": cids}, "kind": "menu"}, {"_id": 0, "node_id": 1, "options": 1, "answered": 1}).to_list(20000)
+    per: dict[str, dict] = {}
+    for m in menus:
+        nid = m.get("node_id") or ""
+        d = per.setdefault(nid, {"shown": 0, "answered": 0, "counts": {}, "labels": {}})
+        d["shown"] += 1
+        for o in m.get("options", []):
+            d["labels"].setdefault(o["id"], o["label"])
+            d["counts"].setdefault(o["id"], 0)
+        if m.get("answered"):
+            d["answered"] += 1
+            d["counts"][m["answered"]] = d["counts"].get(m["answered"], 0) + 1
+    # include configured nodes/options that nobody has seen yet, with current labels
+    for nid, n in node_meta.items():
+        if n.get("options"):
+            d = per.setdefault(nid, {"shown": 0, "answered": 0, "counts": {}, "labels": {}})
+            for o in n["options"]:
+                d["labels"][o["id"]] = o["label"]
+                d["counts"].setdefault(o["id"], 0)
+    nodes, best = [], ("", -1)
+    for nid, d in per.items():
+        meta = node_meta.get(nid, {})
+        opts = sorted((FlowOptionStat(option_id=k, label=d["labels"].get(k, "(removed option)"), count=v,
+                                      pct=round(100 * v / d["answered"], 1) if d["answered"] else 0) for k, v in d["counts"].items()), key=lambda o: -o.count)
+        for o in opts:
+            if o.count > best[1]:
+                best = (o.label, o.count)
+        nodes.append(FlowNodeStat(node_id=nid, title=meta.get("title") or ("(deleted step)" if nid not in node_meta else "Step"),
+                                  prompt=meta.get("prompt", ""), shown=d["shown"], answered=d["answered"], options=opts))
+    nodes.sort(key=lambda n: (n.node_id != flow.get("root"), -n.shown))
+    shown, ans = sum(n.shown for n in nodes), sum(n.answered for n in nodes)
+    return FlowStats(landing_page_id=lp["id"], title=lp["title"], slug=lp["slug"], flow_enabled=bool(flow.get("enabled")), chats=len(cids),
+                     menus_shown=shown, answered=ans, response_rate=round(100 * ans / shown, 1) if shown else 0,
+                     top_option=best[0] if best[1] > 0 else "", nodes=nodes)
+
+
+@router.get("/admin/flow-analytics", response_model=list[FlowStats])
+async def flow_analytics(landing_page_id: str | None = Query(None, max_length=80), user: dict = Depends(require("admin"))):
+    q = {"org_id": user["org_id"], "deleted": {"$ne": True}}
+    if landing_page_id:
+        q["id"] = landing_page_id
+    lps = await db.landing_pages.find(q, {"_id": 0, "id": 1, "title": 1, "slug": 1, "flow": 1}).to_list(200)
+    if landing_page_id and not lps:
+        raise HTTPException(404, "Landing page not found")
+    return [await _flow_stats(lp) for lp in lps]

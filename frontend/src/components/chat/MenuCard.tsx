@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Phone } from "lucide-react";
+import { toast } from "sonner";
 import { apiPost } from "@/lib/api";
+import { startCall } from "@/components/chat/CallModal";
 import { clock, toastErr } from "@/lib/hooks";
 import type { Conversation, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -10,7 +12,13 @@ export function MenuCard({ m, conv, viewer }: { m: Message; conv: Conversation; 
   const qc = useQueryClient();
   const choose = useMutation({
     mutationFn: (option_id: string) => apiPost<Message>(`/conversations/${conv.id}/menu/${m.id}`, { option_id }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["messages", conv.id] }); qc.invalidateQueries({ queryKey: ["conversations"] }); },
+    onSuccess: (_r, optionId) => {
+      const o = m.options?.find((x) => x.id === optionId);
+      if (o?.action === "call") {
+        if (conv.calls_enabled && conv.employee_id) startCall({ cid: conv.id, name: conv.employee_name || conv.org_name, avatar: conv.employee_avatar });
+        else toast("Calls aren't available right now. Your team member will call you back or reply here.");
+      }
+      qc.invalidateQueries({ queryKey: ["messages", conv.id] }); qc.invalidateQueries({ queryKey: ["conversations"] }); },
     onError: toastErr,
   });
   const answered = m.answered || (choose.isPending ? choose.variables : "");
@@ -28,7 +36,7 @@ export function MenuCard({ m, conv, viewer }: { m: Message; conv: Conversation; 
                 className={cn("flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition-[transform,background-color,opacity] duration-150",
                   picked ? "border-primary bg-primary text-primary-foreground" : "border-primary/40 bg-background text-primary",
                   canTap ? "hover:bg-primary/10 active:scale-[0.97]" : !picked && "opacity-50")}>
-                {picked && <CheckCircle2 className="h-4 w-4" />}{o.label}
+                {picked && <CheckCircle2 className="h-4 w-4" />}{o.action === "call" && !picked && <Phone className="h-4 w-4" />}{o.label}
               </button>
             );
           })}

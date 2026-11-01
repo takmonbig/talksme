@@ -81,6 +81,7 @@ class Organization(Base):
     features: dict[str, bool] = {}
     intro_video_url: str = ""
     intro_enabled: bool = True
+    verified: bool = False  # "Verified by TalksMe" badge, granted by Super Admin
 
 
 class OrgBrandingUpdate(BaseModel):
@@ -185,6 +186,7 @@ class Conversation(Base):
     employee_link: str = ""
     employee_verified: bool = False
     employee_phone: str = ""  # Admin-set display number, only when switched on
+    org_verified: bool = False
     landing_page_id: Optional[str] = None
     landing_title: str = ""
     last_message: str = ""
@@ -339,9 +341,30 @@ class DepositEvent(Base):
 
 
 # ---------- landing pages ----------
+class RechargeService(Base):
+    id: str = ""
+    name: str = Field(min_length=1, max_length=60)
+    image: str = ""
+    brief: str = Field("", max_length=300)
+    min_amount: float = Field(100, gt=0, le=10_000_000)
+    max_amount: float = Field(10000, gt=0, le=10_000_000)
+    bonus_pct: float = Field(0, ge=0, le=500)
+    active: bool = True
+
+
+class PaymentConfig(Base):
+    """UPI details shown on the recharge page. qr_mode 'auto' = QR generated with the exact amount; 'image' = Admin's uploaded QR."""
+    upi_id: str = Field("", max_length=80)
+    payee_name: str = Field("", max_length=80)
+    qr_mode: Literal["auto", "image"] = "auto"
+    qr_image: str = ""
+    note: str = Field("", max_length=200)
+
+
 class MenuOption(Base):
     id: str
     label: str
+    action: str = "reply"  # "call" = tapping it starts an audio call
 
 
 class FlowMsg(Base):
@@ -354,6 +377,7 @@ class FlowOption(Base):
     id: str = ""
     label: str = Field(min_length=1, max_length=40)
     next: str = ""  # node id ("" = end of the flow)
+    action: Literal["reply", "call"] = "reply"
 
 
 class FlowNode(Base):
@@ -385,7 +409,7 @@ class LandingPage(Base):
     org_id: str
     title: str
     slug: str
-    template: Literal["A", "B"]
+    template: Literal["A", "B", "C"]
     description: str = ""
     cta_text: str = "Chat Now"
     primary_color: str = "#0284C7"
@@ -403,6 +427,8 @@ class LandingPage(Base):
     available_24_7: bool = False
     default_message: str = ""
     flow: Flow = Flow()
+    services: list[RechargeService] = []
+    payment: PaymentConfig = PaymentConfig()
     auto_send_default: bool = False
     employee_can_edit_message: bool = False
     archived: bool = False
@@ -414,7 +440,7 @@ class LandingPage(Base):
 class LandingPageIn(BaseModel):
     title: str = Field(min_length=2, max_length=120)
     slug: str = Field(min_length=2, max_length=60, pattern=r"^[a-z0-9-]+$")
-    template: Literal["A", "B"] = "B"
+    template: Literal["A", "B", "C"] = "B"
     description: str = Field("", max_length=600)
     cta_text: str = Field("Chat Now", min_length=2, max_length=40)
     primary_color: str = Field("#0284C7", pattern=r"^#[0-9A-Fa-f]{6}$")
@@ -434,6 +460,8 @@ class LandingPageIn(BaseModel):
     auto_send_default: bool = False
     employee_can_edit_message: bool = False
     flow: Flow = Flow()
+    services: list[RechargeService] = Field(default_factory=list, max_length=30)
+    payment: PaymentConfig = PaymentConfig()
 
     @field_validator("pixel_id", mode="before")
     @classmethod
@@ -625,6 +653,7 @@ class OrgPatch(BaseModel):
     plan_id: Optional[str] = None
     domain: Optional[str] = None
     features: Optional[dict[str, bool]] = None
+    verified: Optional[bool] = None
     reason: str = Field("", max_length=300)
 
 
@@ -972,6 +1001,97 @@ class StickerIn(BaseModel):
 class IntroOut(Base):
     enabled: bool
     url: str
+
+
+
+class FlowOptionStat(Base):
+    option_id: str
+    label: str
+    count: int
+    pct: float
+
+
+class FlowNodeStat(Base):
+    node_id: str
+    title: str
+    prompt: str
+    shown: int
+    answered: int
+    options: list[FlowOptionStat]
+
+
+class FlowStats(Base):
+    landing_page_id: str
+    title: str
+    slug: str
+    flow_enabled: bool
+    chats: int
+    menus_shown: int
+    answered: int
+    response_rate: float
+    top_option: str = ""
+    nodes: list[FlowNodeStat]
+
+
+
+class RechargeIn(BaseModel):
+    org_slug: str
+    slug: str
+    service_id: str
+    amount: float = Field(gt=0, le=10_000_000)
+    screenshot_url: str = Field(pattern=r"^https://\S{3,600}$")
+    utr: str = Field("", max_length=40)
+
+
+class RechargeCredentials(Base):
+    username: str = ""
+    password: str = ""
+    note: str = ""
+
+
+class RechargeRequest(Base):
+    id: str
+    org_id: str
+    org_name: str = ""
+    landing_page_id: str
+    service_id: str
+    service_name: str
+    service_image: str = ""
+    customer_user_id: str
+    customer_name: str
+    customer_phone: str = ""
+    conversation_id: str = ""
+    employee_id: Optional[str] = None
+    employee_name: str = ""
+    amount: float
+    bonus_pct: float
+    bonus_amount: float
+    total_credit: float
+    screenshot_url: str
+    utr: str = ""
+    status: Literal["pending", "approved", "rejected"]
+    reject_reason: str = ""
+    handled_by_name: str = ""
+    credentials: Optional[RechargeCredentials] = None
+    created_at: str
+    updated_at: str = ""
+
+
+class RechargeApproveIn(BaseModel):
+    username: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=1, max_length=120)
+    note: str = Field("", max_length=300)
+
+
+class RechargeRejectIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=300)
+
+
+class RechargeSummary(Base):
+    pending: int
+    approved_today: int
+    approved_total_amount: float
+    approved_today_amount: float
 
 
 Message.model_rebuild()

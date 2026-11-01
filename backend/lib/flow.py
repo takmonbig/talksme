@@ -7,6 +7,15 @@ from lib.util import iso, new_id, now
 LABEL = {"image": "📷 Photo", "video": "🎬 Video", "audio": "🎤 Voice note", "file": "📎 File", "sticker": "🙂 Sticker"}
 
 
+def flow_sig(lp: dict) -> str:
+    """Fingerprint of an enabled flow ("" when off) so chats re-run it after the Admin changes it."""
+    import hashlib, json
+    f = lp.get("flow") or {}
+    if not f.get("enabled") or not f.get("root"):
+        return ""
+    return hashlib.sha1(json.dumps(f, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
 def fill(text: str, c: dict, org_name: str, emp_name: str) -> str:
     first = (c.get("customer_name") or "").split(" ")[0]
     return (text or "").replace("{name}", first).replace("{org}", org_name).replace("{employee}", emp_name).strip()
@@ -31,7 +40,7 @@ async def post_bot_messages(c: dict, items: list[dict], menu: dict | None = None
         n += 1
         last = menu.get("prompt") or "Please choose an option 👇"
         docs.append({"text": last, "attachment": None, "kind": "menu", "node_id": menu["id"],
-                     "options": [{"id": o["id"], "label": o["label"]} for o in menu["options"]], "at": iso(base + timedelta(milliseconds=60 * n))})
+                     "options": [{"id": o["id"], "label": o["label"], "action": o.get("action", "reply")} for o in menu["options"]], "at": iso(base + timedelta(milliseconds=60 * n))})
     for d in docs:
         at = d.pop("at")
         await db.messages.insert_one({"id": new_id(), "conversation_id": c["id"], "org_id": c["org_id"], "sender_role": "employee",

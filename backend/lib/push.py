@@ -14,8 +14,10 @@ log = logging.getLogger("push")
 
 def _send(sub: dict, data: dict) -> int:
     try:
+        # Urgency: high wakes Android phones from doze right away. Calls expire fast; messages wait up to a day for an offline phone.
         webpush(subscription_info={"endpoint": sub["endpoint"], "keys": sub["keys"]}, data=json.dumps(data),
-                vapid_private_key=os.environ["VAPID_PRIVATE_KEY"], vapid_claims={"sub": os.environ["VAPID_SUBJECT"]}, ttl=60, timeout=10)
+                vapid_private_key=os.environ["VAPID_PRIVATE_KEY"], vapid_claims={"sub": os.environ["VAPID_SUBJECT"]},
+                ttl=40 if data.get("call") else 86400, headers={"Urgency": "high"}, timeout=10)
         return 201
     except WebPushException as e:
         return e.response.status_code if e.response is not None else 0
@@ -37,11 +39,29 @@ async def push_to(uids: set[str], data: dict, only_if_not_visible: bool = True) 
         log.info("push %s -> %s", data.get("tag"), code)
         ok += code in (200, 201, 202)
         if code in (404, 410):  # expired subscription cleanup
-            await db.push_subscriptions.delete_one({"endpoint": sub["endpoint"]})
+            await db.push_subscriptions.delete_many({"endpoint": sub["endpoint"]})
     return ok
 
 
 _tasks: set[asyncio.Task] = set()
+
+
+async def ring_push_loop(cid: str, callee: str, data: dict, caller_name: str) -> None:
+    """Make a closed app 'ring': re-send the call notification every 5s while the call is still ringing (max ~35s),
+    then replace it with a 'Missed call' notification if nobody answered."""
+    for i in range(7):
+        if not await db.rt_calls.find_one({"_id": cid, "callee": callee}, {"_id": 1}):
+            return  # answered / rejected / ended
+        await push_to({callee}, {**data, "ring": i}, only_if_not_visible=False)
+        await asyncio.sleep(5)
+    if await db.rt_calls.find_one({"_id": cid, "callee": callee}, {"_id": 1}):
+        await push_to({callee}, {"title": f"📵 Missed call · {caller_name}", "body": "Tap to open the chat and call back", "url": data["url"], "tag": data["tag"]}, only_if_not_visible=False)
+
+
+def ring_bg(cid: str, callee: str, data: dict, caller_name: str) -> None:
+    t = asyncio.get_running_loop().create_task(ring_push_loop(cid, callee, data, caller_name))
+    _tasks.add(t)
+    t.add_done_callback(_tasks.discard)
 
 
 def push_bg(uids: set[str], data: dict, only_if_not_visible: bool = True) -> None:

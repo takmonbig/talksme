@@ -1,3 +1,4 @@
+import { COUNTRIES, CountryCodePicker, defaultCountry } from "@/components/CountryCodePicker";
 import { useState } from "react";
 import { ContactFooter } from "@/components/ContactFooter";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -29,7 +30,7 @@ export default function Login() {
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"email" | "otp">("email");
-  const [otp, setOtp] = useState({ cc: "+91", phone: "", code: "", challenge: "" });
+  const [otp, setOtp] = useState({ cc: defaultCountry().dial, phone: "", code: "", challenge: "" });
   const me = useMe();
   const done = (u: User) => {
     beginSession();
@@ -107,7 +108,7 @@ export default function Login() {
                 <h2 className="font-heading text-2xl font-bold">Customer sign in</h2>
                 <p className="text-sm text-muted-foreground">We'll send a 6-digit code to your WhatsApp.</p>
                 <div className="flex gap-2">
-                  <Input className="w-20" value={otp.cc} onChange={(e) => setOtp({ ...otp, cc: e.target.value })} data-testid="otp-country-input" />
+                  <CountryCodePicker value={COUNTRIES.find((c) => c.dial === otp.cc) ?? defaultCountry()} onChange={(c) => setOtp({ ...otp, cc: c.dial })} testid="otp-country-input" />
                   <Input inputMode="tel" placeholder="WhatsApp number" value={otp.phone} onChange={(e) => setOtp({ ...otp, phone: e.target.value })} data-testid="otp-phone-input" />
                 </div>
                 {otp.challenge && <Input inputMode="numeric" placeholder="6-digit code" value={otp.code} onChange={(e) => setOtp({ ...otp, code: e.target.value.replace(/\D/g, "").slice(0, 6) })} className="text-center font-mono tracking-[0.4em]" data-testid="otp-code-input" />}

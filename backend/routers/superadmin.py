@@ -102,6 +102,8 @@ async def patch_org(oid: str, body: OrgPatch, user: dict = Depends(sa)):
     if "plan_id" in upd and not await db.plans.find_one({"id": upd["plan_id"]}):
         raise HTTPException(404, "Plan not found")
     await db.organizations.update_one({"id": oid}, {"$set": upd})
+    if "verified" in upd:
+        await audit(user, "org.verified_badge_" + ("granted" if upd["verified"] else "removed"), f"org:{org['slug']}", oid, body.reason)
     await audit(user, "org.updated", f"org:{org['slug']} {upd}", oid, body.reason)
     return next(r for r in await org_rows() if r["id"] == oid)
 

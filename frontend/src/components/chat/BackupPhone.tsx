@@ -1,3 +1,4 @@
+import { CountryCodePicker, defaultCountry } from "@/components/CountryCodePicker";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -20,14 +21,15 @@ function useBackupPhone(onSaved?: () => void) {
   return { save, skip };
 }
 
-function PhoneForm({ onSubmit, pending, autoFocus }: { onSubmit: (b: { country_code: string; phone: string }) => void; pending: boolean; autoFocus?: boolean }) {
-  const [cc, setCc] = useState("+91");
+export function PhoneForm({ onSubmit, pending, autoFocus }: { onSubmit: (b: { country_code: string; phone: string }) => void; pending: boolean; autoFocus?: boolean }) {
+  const [country, setCountry] = useState(defaultCountry);
+  const cc = country.dial;
   const [phone, setPhone] = useState("");
   const digits = phone.replace(/\D/g, "");
   const ok = /^\+\d{1,4}$/.test(cc) && digits.length >= 6 && digits.length <= 14;
   return (
     <form className="flex gap-1.5" onSubmit={(e) => { e.preventDefault(); if (ok) onSubmit({ country_code: cc, phone: digits }); }}>
-      <Input className="h-9 w-16 bg-background px-2" value={cc} onChange={(e) => setCc(e.target.value)} inputMode="tel" aria-label="Country code" data-testid="backup-phone-cc" />
+      <CountryCodePicker value={country} onChange={setCountry} testid="backup-phone-cc" />
       <Input className="h-9 min-w-0 flex-1 bg-background" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="WhatsApp number" autoFocus={autoFocus} data-testid="backup-phone-input" />
       <Button type="submit" size="sm" className="h-9" disabled={!ok || pending} data-testid="backup-phone-share">{pending ? "Saving…" : "Share"}</Button>
     </form>

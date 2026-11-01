@@ -45,3 +45,20 @@ async def aclient():
 
 
 # --- app-specific fixtures below this line ---
+
+PW = "Demo@123"
+
+
+def login_header(email: str, password: str = PW) -> dict:
+    """Log in and return a Cookie header usable for subsequent requests.
+
+    The backend issues a role-specific cookie name (omni_session for staff/superadmin,
+    omni_customer for customers) so a guest chat on the same browser never signs staff out.
+    This helper picks whichever cookie the login response actually set.
+    """
+    r = httpx.post(api_url("/auth/login"), json={"email": email, "password": password})
+    assert r.status_code == 200, r.text
+    for name in ("omni_session", "omni_customer"):
+        if name in r.cookies:
+            return {"Cookie": f"{name}={r.cookies[name]}"}
+    raise AssertionError(f"no session cookie set for {email}: {dict(r.cookies)}")

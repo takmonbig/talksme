@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api";
 import { enableNotifications, isIOS, notifSupported, syncPushSubscription, useNotificationPermission } from "@/lib/pwa";
 import { onRealtime } from "@/lib/realtime";
+import { useCallActive } from "@/lib/callState";
 import type { PendingNotifyReminder, PushTestOut, User } from "@/lib/types";
 
 const FIVE_MIN = 5 * 60 * 1000;
@@ -23,6 +24,7 @@ export async function sendTestPush() {
 
 /** Admin-triggered "turn on notifications" popup. Pending reminder is stored server-side so offline users see it on next open; a realtime event shows it instantly. */
 export function AdminNotifyReminderPopup({ me }: { me: User }) {
+  const inCall = useCallActive();
   const qc = useQueryClient();
   const perm = useNotificationPermission();
   const q = useQuery({ queryKey: ["notify-reminder", me.id], queryFn: () => apiGet<PendingNotifyReminder | null>("/me/notify-reminder") });
@@ -35,7 +37,7 @@ export function AdminNotifyReminderPopup({ me }: { me: User }) {
     else if (p === "denied") toast.error("Blocked. Tap the 🔒 lock icon in the address bar, then Notifications, then Allow");
   };
   return (
-    <Dialog open={!!r} onOpenChange={(o) => !o && void close()}>
+    <Dialog open={!!r && !inCall} onOpenChange={(o) => !o && void close()}>
       <DialogContent className="sm:max-w-sm" data-testid="admin-notify-reminder-dialog">
         <DialogHeader className="items-center text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground"><BellRing className="h-7 w-7 animate-[wiggle_1.6s_ease-in-out_infinite]" /></span>
@@ -52,6 +54,7 @@ export function AdminNotifyReminderPopup({ me }: { me: User }) {
 
 /** Notifications are essential: until allowed, ask again every 5 minutes (customers + staff). Never re-prompts the browser after a denial; shows unblock steps instead. */
 export function NotificationReminder({ me }: { me: User }) {
+  const inCall = useCallActive();
   const perm = useNotificationPermission();
   const [open, setOpen] = useState(false);
   const needs = me.role !== "superadmin" && perm !== "granted" && (perm !== "unsupported" || isIOS());
@@ -69,7 +72,7 @@ export function NotificationReminder({ me }: { me: User }) {
   const close = () => { sessionStorage.setItem("notify-reminder-at", String(Date.now())); setOpen(false); };
   const denied = perm === "denied";
   return (
-    <Dialog open={open && needs} onOpenChange={(o) => !o && close()}>
+    <Dialog open={open && needs && !inCall} onOpenChange={(o) => !o && close()}>
       <DialogContent className="sm:max-w-sm" data-testid="notify-reminder-dialog">
         <DialogHeader className="items-center text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground"><BellRing className="h-7 w-7 animate-[wiggle_1.6s_ease-in-out_infinite]" /></span>
@@ -93,6 +96,7 @@ export function NotificationReminder({ me }: { me: User }) {
 
 /** Customers without a WhatsApp backup number are asked once a day (optional). */
 export function DailyBackupPhonePrompt({ me }: { me: User }) {
+  const inCall = useCallActive();
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (me.role !== "customer" || me.phone) return;
@@ -105,5 +109,5 @@ export function DailyBackupPhonePrompt({ me }: { me: User }) {
     }, 2500);
     return () => clearInterval(t);
   }, [me.role, me.phone]);
-  return <BackupPhoneDialog open={open} onOpenChange={setOpen} />;
+  return <BackupPhoneDialog open={open && !inCall} onOpenChange={setOpen} />;
 }

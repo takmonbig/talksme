@@ -18,11 +18,14 @@ export class ApiError extends Error {
 
 type JsonBody = unknown;
 
+/** Customer app (/chat, /p/…) vs staff app: staff and customer sessions use separate cookies, so testing a landing page never signs an employee out. */
+export const appCtx = (): "customer" | "staff" => (/^\/(chat|p\/)/.test(location.pathname) ? "customer" : "staff");
+
 async function request<T>(method: string, path: string, body?: JsonBody): Promise<T> {
   // Auth rides the httpOnly session cookie automatically — never add auth headers here.
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    headers: body === undefined ? { "X-Ctx": appCtx() } : { "Content-Type": "application/json", "X-Ctx": appCtx() },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 

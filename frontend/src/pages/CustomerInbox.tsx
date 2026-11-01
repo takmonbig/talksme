@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Archive, Ban, BellOff, LogOut, MoreVertical, Search, Settings, ShieldAlert, ShieldCheck, WifiOff } from "lucide-react";
@@ -14,7 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Avatar, EmptyState, Logo, Skeleton, ThemeToggle, VerifiedBadge } from "@/components/common";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { IntroFlow } from "@/components/IntroFlow";
-import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import { ApiError, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { MyServicesPanel } from "@/components/recharge/RechargeFlow";
 import { endSession } from "@/lib/session";
 import { timeAgo, toastErr, useMe } from "@/lib/hooks";
 import { useOnline } from "@/lib/pwa";
@@ -75,14 +76,16 @@ export default function CustomerInbox() {
   const me = useMe();
   const online = useOnline();
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<"all" | "unread" | "archived">("all");
+  const [params, setParams] = useSearchParams();
+  const tab = (params.get("tab") as "all" | "unread" | "archived" | "services" | null) ?? "all";
+  const setTab = (t: string) => setParams(t === "all" ? {} : { tab: t }, { replace: true });
   const [prefs, setPrefs] = useState(false);
   const [backup, setBackup] = useState(false);
   const [report, setReport] = useState(false);
   const isCustomer = me.data?.role === "customer";
   const list = useQuery({
-    queryKey: ["conversations", "customer", tab, q],
-    queryFn: () => apiGet<Conversation[]>(`/conversations?filter=${tab}&q=${encodeURIComponent(q)}`),
+    queryKey: ["conversations", "customer", tab === "services" ? "all" : tab, q],
+    queryFn: () => apiGet<Conversation[]>(`/conversations?filter=${tab === "services" ? "all" : tab}&q=${encodeURIComponent(q)}`),
     enabled: isCustomer, refetchInterval: 20000,
   });
   const active = useQuery({
@@ -96,7 +99,16 @@ export default function CustomerInbox() {
   });
 
   if (me.isLoading) return <div className="p-6"><Skeleton className="h-screen" /></div>;
+  if (!me.data && me.isError && !(me.error instanceof ApiError && me.error.status === 401)) return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center" data-testid="session-reconnecting">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+      <p className="text-sm text-muted-foreground">Reconnecting… you're still signed in.</p>
+      <Button size="sm" variant="outline" onClick={() => me.refetch()}>Retry now</Button>
+    </div>
+  );
   if (!me.data) return <Navigate to="/demo?next=/chat" replace />;
+  // the installed app opens /chat: staff go straight back to their workspace instead of looking "signed out"
+  if (!isCustomer && !conversationId) return <Navigate to={me.data.role === "superadmin" ? "/superadmin" : me.data.role === "admin" ? "/admin" : "/employee"} replace />;
   if (!isCustomer) {
     return <div className="flex min-h-screen items-center justify-center p-6"><EmptyState title="Customer inbox" text="This universal inbox is for customers. Sign in with the customer demo account or start a chat from a landing page." action={<Button onClick={() => endSession("/demo")} data-testid="switch-to-customer-button">Switch account</Button>} /></div>;
   }
@@ -129,12 +141,12 @@ export default function CustomerInbox() {
           <div className="space-y-2 p-3">
             <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search chats" className="pl-9" data-testid="customer-search-input" /></div>
             <div className="flex gap-1">
-              {(["all", "unread", "archived"] as const).map((t) => (
-                <button key={t} onClick={() => setTab(t)} data-testid={`customer-tab-${t}`} className={cn("rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors", tab === t ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{t}</button>
+              {(["all", "unread", "archived", "services"] as const).map((t) => (
+                <button key={t} onClick={() => setTab(t)} data-testid={`customer-tab-${t}`} className={cn("rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors", tab === t ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground", t === "services" && tab !== t && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300")}>{t === "services" ? "💳 My Services" : t}</button>
               ))}
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto" data-testid="customer-conversation-list">
+          {tab === "services" ? <div className="min-h-0 flex-1 overflow-y-auto"><MyServicesPanel /></div> : <div className="min-h-0 flex-1 overflow-y-auto" data-testid="customer-conversation-list">
             {list.isLoading && <div className="space-y-2 p-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-16" />)}</div>}
             {list.data?.length === 0 && <div className="p-4"><EmptyState title="No chats yet" text="Open any business's talksme.in page to start chatting." action={<Link to="/p/talksme/support"><Button size="sm" data-testid="open-demo-business-button">Open a demo business</Button></Link>} /></div>}
             {list.data?.map((c) => (
@@ -148,7 +160,7 @@ export default function CustomerInbox() {
                 </div>
               </button>
             ))}
-          </div>
+          </div>}
           <p className="flex items-center gap-1 border-t px-4 py-2 text-[10px] text-emerald-600" data-testid="customer-secure-footer"><ShieldAlert className="h-3 w-3" /> 100% private & secure · each business only sees its own chat with you</p>
         </aside>
         <main className={cn("min-w-0 flex-1", !conversationId && "hidden md:block")}>
