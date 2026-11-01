@@ -359,6 +359,21 @@ class TrustLink(Base):
     url: str = Field("", pattern=r"^(https?://\S{3,500})?$")
 
 
+class OfferBanner(Base):
+    """Time-limited promo banner with a live countdown (display only; bonus amounts don't change)."""
+    enabled: bool = False
+    title: str = Field("Limited time: extra bonus!", max_length=80)
+    subtitle: str = Field("", max_length=160)
+    ends_at: str = ""  # ISO datetime; banner hides itself after this
+
+
+class Review(Base):
+    id: str = ""
+    name: str = Field(min_length=1, max_length=60)
+    rating: int = Field(5, ge=1, le=5)
+    text: str = Field("", max_length=300)
+
+
 class PaymentConfig(Base):
     """UPI details shown on the recharge page. qr_mode 'auto' = QR generated with the exact amount; 'image' = Admin's uploaded QR."""
     upi_id: str = Field("", max_length=80)
@@ -438,6 +453,8 @@ class LandingPage(Base):
     payment: PaymentConfig = PaymentConfig()
     slides: list[str] = []
     trust_links: list[TrustLink] = []
+    offer: OfferBanner = OfferBanner()
+    reviews: list[Review] = []
     auto_send_default: bool = False
     employee_can_edit_message: bool = False
     archived: bool = False
@@ -473,6 +490,8 @@ class LandingPageIn(BaseModel):
     payment: PaymentConfig = PaymentConfig()
     slides: list[str] = Field(default_factory=list, max_length=8)
     trust_links: list[TrustLink] = Field(default_factory=list, max_length=12)
+    offer: OfferBanner = OfferBanner()
+    reviews: list[Review] = Field(default_factory=list, max_length=30)
 
     @field_validator("pixel_id", mode="before")
     @classmethod

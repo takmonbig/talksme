@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BadgeCheck, Clock, CopyCheck, Lock, MessageCircle, ShieldCheck, Sparkles } from "lucide-react";
+import { BadgeCheck, Clock, CopyCheck, Lock, MessageCircle, ShieldCheck, Sparkles, Star } from "lucide-react";
 import { Avatar, TalksMeVerified } from "@/components/common";
 import type { LandingPageInput, PublicEmployee } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -191,6 +191,7 @@ function RechargeTemplate({ page, orgName, logo, verified, onChat, onService, mo
             <p className="mt-1 text-sm text-white/85">{page.description}</p>
           </div>
         )}
+        <OfferCountdown offer={page.offer} color={c} />
         <div className="mt-6 flex items-end justify-between">
           <p className="text-lg font-extrabold">Choose service <span className="inline-block animate-[wiggle_1.6s_ease-in-out_infinite]">👇</span></p>
           {slides.length > 0 && <p className="max-w-[55%] truncate text-xs text-slate-500">{page.title}</p>}
@@ -228,6 +229,7 @@ function RechargeTemplate({ page, orgName, logo, verified, onChat, onService, mo
             ); })}
           </div>
         )}
+        <ReviewsStrip reviews={page.reviews ?? []} />
         {links.length > 0 && (
           <div className="mt-6" data-testid="lp-c-trust-links">
             <p className="mb-2 text-sm font-extrabold">For more trust, check our site 🔗</p>
@@ -241,6 +243,65 @@ function RechargeTemplate({ page, orgName, logo, verified, onChat, onService, mo
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+/** Live countdown for the Admin's time-limited offer. Hides itself once the end time passes. */
+function OfferCountdown({ offer, color }: { offer?: LandingPageInput["offer"]; color: string }) {
+  const end = offer?.enabled && offer.ends_at ? new Date(offer.ends_at).getTime() : 0;
+  const [nowMs, setNow] = useState(() => Date.now());
+  useEffect(() => { if (!end) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [end]);
+  const left = Math.max(0, Math.floor((end - nowMs) / 1000));
+  if (!end || left <= 0) return null;
+  const d = Math.floor(left / 86400), h = Math.floor((left % 86400) / 3600), m = Math.floor((left % 3600) / 60), sec = left % 60;
+  const units = [...(d ? [[d, "days"]] : []), [h, "hrs"], [m, "min"], [sec, "sec"]] as [number, string][];
+  return (
+    <div className="relative mt-4 overflow-hidden rounded-3xl p-4 text-white shadow-lg" style={{ background: `linear-gradient(120deg, #f97316, #ec4899, ${color})` }} data-testid="lp-offer-banner">
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-1/4 animate-shimmer bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+      <div className="relative flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider"><span className="relative flex h-2 w-2"><span className="absolute inset-0 animate-ping rounded-full bg-white" /><span className="relative h-2 w-2 rounded-full bg-white" /></span> Offer ends soon</p>
+          <p className="text-lg font-extrabold leading-tight" data-testid="lp-offer-title">{offer!.title}</p>
+          {offer!.subtitle && <p className="text-xs text-white/85">{offer!.subtitle}</p>}
+        </div>
+        <div className="flex gap-1.5" data-testid="lp-offer-countdown">
+          {units.map(([v, l]) => (
+            <div key={l} className="w-12 rounded-xl bg-black/25 py-1 text-center backdrop-blur">
+              <p className="text-xl font-black tabular-nums leading-none">{String(v).padStart(2, "0")}</p>
+              <p className="text-[9px] uppercase text-white/80">{l}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Admin-entered customer reviews with star ratings. */
+function ReviewsStrip({ reviews }: { reviews: LandingPageInput["reviews"] }) {
+  const list = reviews.filter((r) => r.name.trim());
+  if (!list.length) return null;
+  const avg = list.reduce((a, r) => a + r.rating, 0) / list.length;
+  const stars = (n: number, size = "h-3.5 w-3.5") => <span className="flex">{[1, 2, 3, 4, 5].map((i) => <Star key={i} className={cn(size, i <= Math.round(n) ? "fill-amber-400 text-amber-400" : "text-slate-300")} />)}</span>;
+  return (
+    <div className="mt-6" data-testid="lp-reviews">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm font-extrabold">What customers say 💬</p>
+        <p className="flex items-center gap-1 text-xs font-semibold text-slate-600" data-testid="lp-reviews-average">{stars(avg, "h-3 w-3")} {avg.toFixed(1)} · {list.length} reviews</p>
+      </div>
+      <div className="flex snap-x gap-3 overflow-x-auto pb-2 [scrollbar-width:none]">
+        {list.map((r, i) => (
+          <div key={r.id || i} className="w-60 shrink-0 snap-start animate-rise rounded-2xl border bg-white p-3 shadow-sm" style={{ animationDelay: `${i * 70}ms` }} data-testid="lp-review-card">
+            <div className="flex items-center gap-2">
+              <Avatar name={r.name} size={30} />
+              <div className="min-w-0"><p className="truncate text-sm font-bold">{r.name}</p>{stars(r.rating, "h-3 w-3")}</div>
+            </div>
+            {r.text && <p className="mt-2 line-clamp-4 text-xs text-slate-600">“{r.text}”</p>}
+          </div>
+        ))}
       </div>
     </div>
   );

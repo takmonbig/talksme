@@ -1,4 +1,4 @@
-import { Images, Link2, Plus, QrCode, Trash2, Upload } from "lucide-react";
+import { Images, Link2, Plus, QrCode, Star, Timer, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { uid } from "@/lib/hooks";
 import { uploadFile } from "@/lib/media";
 import { upiLink } from "@/components/recharge/RechargeFlow";
-import type { LandingPageInput, PaymentConfig, RechargeService, TrustLink } from "@/lib/types";
+import type { LandingPageInput, OfferBanner, PaymentConfig, RechargeService, Review, TrustLink } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const rechargeErrors = (f: LandingPageInput): string[] => {
@@ -21,6 +21,7 @@ export const rechargeErrors = (f: LandingPageInput): string[] => {
   });
   if (f.payment.qr_mode === "auto" && !/^[\w.-]{2,}@[\w.-]{2,}$/.test(f.payment.upi_id.trim())) e.push("Enter a valid UPI ID (e.g. talksme@upi)");
   if (f.payment.qr_mode === "image" && !f.payment.qr_image) e.push("Upload your payment QR image");
+  (f.reviews ?? []).forEach((r) => { if (!r.name.trim()) e.push("Every review needs a customer name"); });
   (f.trust_links ?? []).forEach((l) => { if (l.url && !/^https?:\/\/\S{3,}$/.test(l.url)) e.push(`Trust link "${l.title || l.url}" must start with https://`); });
   return e;
 };
@@ -33,10 +34,17 @@ const pickImage = async (cb: (url: string) => void) => {
 };
 
 /** Template C editor: services (image, brief, min/max, bonus %) + UPI payment details (auto QR with amount, or uploaded QR). */
-export function RechargeEditor({ services, payment, onServices, onPayment, slides, onSlides, trustLinks, onTrustLinks }: {
+export function RechargeEditor({ services, payment, onServices, onPayment, slides, onSlides, trustLinks, onTrustLinks, offer, onOffer, reviews, onReviews }: {
   services: RechargeService[]; payment: PaymentConfig; onServices: (v: RechargeService[]) => void; onPayment: (v: PaymentConfig) => void;
   slides: string[]; onSlides: (v: string[]) => void; trustLinks: TrustLink[]; onTrustLinks: (v: TrustLink[]) => void;
+  offer?: OfferBanner; onOffer: (v: OfferBanner) => void; reviews: Review[]; onReviews: (v: Review[]) => void;
 }) {
+  const of = offer ?? { enabled: false, title: "Limited time: extra bonus!", subtitle: "", ends_at: "" };
+  const setOffer = (p: Partial<OfferBanner>) => onOffer({ ...of, ...p });
+  const updRev = (i: number, p: Partial<Review>) => onReviews(reviews.map((r, j) => (j === i ? { ...r, ...p } : r)));
+  // datetime-local <-> ISO (the admin picks local time)
+  const localVal = of.ends_at ? new Date(new Date(of.ends_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
+  const quick = (h: number) => setOffer({ enabled: true, ends_at: new Date(Date.now() + h * 3600_000).toISOString() });
   const updLink = (i: number, p: Partial<TrustLink>) => onTrustLinks(trustLinks.map((l, j) => (j === i ? { ...l, ...p } : l)));
   const upd = (i: number, p: Partial<RechargeService>) => onServices(services.map((s, j) => (j === i ? { ...s, ...p } : s)));
   const pay = (p: Partial<PaymentConfig>) => onPayment({ ...payment, ...p });
@@ -102,6 +110,34 @@ export function RechargeEditor({ services, payment, onServices, onPayment, slide
         )}
         {payment.qr_mode === "auto" && payment.upi_id && <div className="flex items-center gap-2 text-[11px] text-muted-foreground"><span className="rounded-lg border bg-white p-1"><QRCodeSVG value={upiLink(payment.upi_id, payment.payee_name, 100, "Preview")} size={64} /></span>Preview for ₹100. Customers get a QR with their exact amount.</div>}
         <Input value={payment.note} maxLength={200} placeholder="Note on payment screen (optional), e.g. 'Pay only to this UPI'" onChange={(e) => pay({ note: e.target.value })} data-testid="recharge-note-config" />
+      </div>
+      <div className="space-y-2 rounded-xl border border-orange-300/60 bg-orange-50/40 p-3 dark:bg-orange-500/5" data-testid="recharge-offer-editor">
+        <div className="flex items-center justify-between"><Label className="flex items-center gap-1.5"><Timer className="h-4 w-4 text-orange-600" /> Offer countdown banner</Label><Switch checked={of.enabled} onCheckedChange={(v) => setOffer({ enabled: v, ends_at: of.ends_at || new Date(Date.now() + 24 * 3600_000).toISOString() })} data-testid="recharge-offer-switch" /></div>
+        {of.enabled && (
+          <>
+            <Input value={of.title} maxLength={80} placeholder="e.g. Extra 10% bonus today only!" onChange={(e) => setOffer({ title: e.target.value })} data-testid="recharge-offer-title" />
+            <Input value={of.subtitle} maxLength={160} placeholder="Small line under the title (optional)" onChange={(e) => setOffer({ subtitle: e.target.value })} data-testid="recharge-offer-subtitle" />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Input type="datetime-local" className="h-8 w-auto" value={localVal} onChange={(e) => setOffer({ ends_at: e.target.value ? new Date(e.target.value).toISOString() : "" })} data-testid="recharge-offer-ends" />
+              {[[2, "2h"], [6, "6h"], [24, "24h"], [72, "3 days"]].map(([h, l]) => <Button key={l} size="xs" variant="outline" onClick={() => quick(h as number)}>{l}</Button>)}
+            </div>
+            <p className="text-[11px] text-muted-foreground">{of.ends_at && new Date(of.ends_at).getTime() > Date.now() ? `Ends ${new Date(of.ends_at).toLocaleString()}` : "⚠ End time is in the past, so the banner is hidden"} · Display only, bonus amounts don't change.</p>
+          </>
+        )}
+      </div>
+      <div className="space-y-2 rounded-xl border p-3" data-testid="recharge-reviews-editor">
+        <Label className="flex items-center gap-1.5"><Star className="h-4 w-4 text-amber-500" /> Customer reviews (shown above "check our site")</Label>
+        {reviews.map((r, i) => (
+          <div key={r.id} className="space-y-1 rounded-lg border bg-muted/20 p-2" data-testid="recharge-review-row">
+            <div className="flex items-center gap-2">
+              <Input className="h-7 flex-1 text-xs" value={r.name} maxLength={60} placeholder="Customer name" onChange={(e) => updRev(i, { name: e.target.value })} data-testid="recharge-review-name" />
+              <div className="flex">{[1, 2, 3, 4, 5].map((n) => <button key={n} onClick={() => updRev(i, { rating: n })} aria-label={`${n} stars`} data-testid="recharge-review-star"><Star className={cn("h-4 w-4", n <= r.rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground")} /></button>)}</div>
+              <Button size="icon-sm" variant="ghost" onClick={() => onReviews(reviews.filter((_, j) => j !== i))}><Trash2 className="h-3.5 w-3.5" /></Button>
+            </div>
+            <Input className="h-7 text-xs" value={r.text} maxLength={300} placeholder="Short review" onChange={(e) => updRev(i, { text: e.target.value })} data-testid="recharge-review-text" />
+          </div>
+        ))}
+        {reviews.length < 30 && <Button size="sm" variant="outline" onClick={() => onReviews([...reviews, { id: uid(), name: "", rating: 5, text: "" }])} data-testid="recharge-review-add"><Plus className="h-3.5 w-3.5" /> Add review</Button>}
       </div>
       <div className="space-y-2 rounded-xl border p-3" data-testid="recharge-trust-links-editor">
         <Label className="flex items-center gap-1.5"><Link2 className="h-4 w-4" /> "For more trust, check our site" (shown after the services)</Label>
