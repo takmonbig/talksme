@@ -58,7 +58,7 @@ export interface LandingPageInput {
   title: string; slug: string; template: "A" | "B" | "C"; description: string; cta_text: string; primary_color: string; font: string;
   logo_url: string; banner_url: string; trust_items: string[]; routing: Routing; assigned_employee_ids: string[]; images: LPImage[];
   calls_enabled: boolean; pixel_id: string; pixel_ids: string[]; published: boolean; available_24_7: boolean;
-  default_message: string; auto_send_default: boolean; employee_can_edit_message: boolean; flow: Flow; services: RechargeService[]; payment: PaymentConfig;
+  default_message: string; auto_send_default: boolean; employee_can_edit_message: boolean; flow: Flow; services: RechargeService[]; payment: PaymentConfig; slides: string[]; trust_links: TrustLink[];
 }
 export interface LandingPage extends LandingPageInput { id: string; org_id: string; views: number; leads: number; archived: boolean; created_at: string }
 export interface PublicEmployee { id: string; name: string; avatar: string; title: string; status: string; verified: boolean }
@@ -136,3 +136,4 @@ export interface RechargeRequest {
   status: "pending" | "approved" | "rejected"; reject_reason: string; handled_by_name: string; credentials: RechargeCredentials | null; created_at: string; updated_at: string;
 }
 export interface RechargeSummary { pending: number; approved_today: number; approved_total_amount: number; approved_today_amount: number }
+export interface TrustLink { id: string; title: string; image: string; url: string }

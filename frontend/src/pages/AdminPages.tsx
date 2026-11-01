@@ -229,7 +229,7 @@ const EMPTY_LP: LandingPageInput = {
   primary_color: "#0284C7", font: "Inter", logo_url: "", banner_url: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1400&q=70",
   trust_items: ["Verified team members", "Secure, encrypted chat", "Replies in under 5 minutes"], routing: "round_robin", assigned_employee_ids: [], images: [],
   calls_enabled: true, pixel_id: "", pixel_ids: [], published: false, available_24_7: false,
-  default_message: "Hello! I am interested in your service. Please share more details.", auto_send_default: false, employee_can_edit_message: false, flow: EMPTY_FLOW, services: [], payment: { upi_id: "", payee_name: "", qr_mode: "auto", qr_image: "", note: "" },
+  default_message: "Hello! I am interested in your service. Please share more details.", auto_send_default: false, employee_can_edit_message: false, flow: EMPTY_FLOW, services: [], payment: { upi_id: "", payee_name: "", qr_mode: "auto", qr_image: "", note: "" }, slides: [], trust_links: [],
 };
 
 function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: string | null; org: Organization; onDone: () => void }) {
@@ -269,7 +269,7 @@ function Builder({ initial, id, org, onDone }: { initial: LandingPageInput; id: 
                 </button>
               ))}
             </div>
-            {f.template === "C" && <RechargeEditor services={f.services ?? []} payment={f.payment} onServices={(v) => set("services", v)} onPayment={(v) => set("payment", v)} />}
+            {f.template === "C" && <RechargeEditor services={f.services ?? []} payment={f.payment} onServices={(v) => set("services", v)} onPayment={(v) => set("payment", v)} slides={f.slides ?? []} onSlides={(v) => set("slides", v)} trustLinks={f.trust_links ?? []} onTrustLinks={(v) => set("trust_links", v)} />}
             <div className="space-y-1"><Label>Title</Label><Input value={f.title} onChange={(e) => set("title", e.target.value)} data-testid="builder-title-input" /></div>
             <div className="space-y-1"><Label>Path</Label><div className="flex items-center gap-1 text-sm"><span className="text-muted-foreground">{org.domain || "your-domain"}/</span><Input value={f.slug} onChange={(e) => set("slug", e.target.value.toLowerCase())} data-testid="builder-slug-input" /></div></div>
             <div className="space-y-1"><Label>Description</Label><Textarea value={f.description} onChange={(e) => set("description", e.target.value)} rows={2} data-testid="builder-description-input" /></div>

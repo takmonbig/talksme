@@ -7,7 +7,7 @@ import { BellRing, CheckCircle2, Copy, Eye, EyeOff, Gift, ImageUp, KeyRound, Shi
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState, Skeleton } from "@/components/common";
+import { Avatar, EmptyState, Skeleton } from "@/components/common";
 import { PhoneForm } from "@/components/chat/BackupPhone";
 import { StatusPill } from "@/components/recharge/RechargeQueue";
 import { apiGet, apiPost } from "@/lib/api";
@@ -15,7 +15,7 @@ import { money, timeAgo, toastErr } from "@/lib/hooks";
 import { uploadFile } from "@/lib/media";
 import { enableNotifications, useNotificationPermission } from "@/lib/pwa";
 import { onRealtime } from "@/lib/realtime";
-import type { LandingPageInput, RechargeRequest, RechargeService, User } from "@/lib/types";
+import type { Conversation, LandingPageInput, RechargeRequest, RechargeService, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Step = "amount" | "pay" | "upload" | "phone" | "done";
@@ -36,6 +36,8 @@ export function RechargeFlow({ page, orgSlug, slug, service, ensureSession, onCl
   const [shot, setShot] = useState<{ url: string } | null>(null);
   const [utr, setUtr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cid, setCid] = useState("");
+  const mgr = useQuery({ queryKey: ["conversation", cid], queryFn: () => apiGet<Conversation>(`/conversations/${cid}`), enabled: !!cid });
   const fileRef = useRef<HTMLInputElement>(null);
   const a = Number(amount);
   const amountOk = Number.isFinite(a) && a >= service.min_amount && a <= service.max_amount;
@@ -55,7 +57,7 @@ export function RechargeFlow({ page, orgSlug, slug, service, ensureSession, onCl
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["me"] }); submit.mutate(); },
     onError: toastErr,
   });
-  const toPay = async () => { setBusy(true); try { await ensureSession(); setStep("pay"); } catch (e) { toastErr(e); } finally { setBusy(false); } };
+  const toPay = async () => { setBusy(true); try { setCid(await ensureSession()); setStep("pay"); } catch (e) { toastErr(e); } finally { setBusy(false); } };
   const upload = async (f?: File) => {
     if (!f) return;
     if (!f.type.startsWith("image/")) return toast.error("Upload the payment screenshot (image)");
@@ -72,13 +74,13 @@ export function RechargeFlow({ page, orgSlug, slug, service, ensureSession, onCl
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o && !submit.isPending) onClose(); }}>
-      <DialogContent className="max-h-[94dvh] overflow-y-auto p-0 sm:max-w-md" data-testid="recharge-flow">
+      <DialogContent className="max-h-[94dvh] grid-cols-1 overflow-y-auto overflow-x-hidden p-0 sm:max-w-md" data-testid="recharge-flow">
         <div className="flex items-center gap-3 rounded-t-xl p-4 text-white" style={{ background: `linear-gradient(135deg, ${c}, ${c}bb)` }}>
           {service.image && <img src={service.image} alt="" className="h-12 w-12 rounded-xl border-2 border-white/60 object-cover" />}
           <div className="min-w-0"><DialogTitle className="truncate text-lg text-white">{service.name}</DialogTitle><DialogDescription className="text-white/80">Step {idx + 1} of 4</DialogDescription></div>
         </div>
         <div className="flex gap-1 px-4 pt-3">{steps.map((s, i) => <span key={s} className="h-1.5 flex-1 rounded-full transition-colors duration-300" style={{ background: i <= idx ? c : "#e2e8f0" }} />)}</div>
-        <div className="space-y-4 p-4">
+        <div className="min-w-0 space-y-4 overflow-hidden p-4">
           {step === "amount" && (
             <>
               <DialogHeader className="text-left"><p className="font-semibold">How much do you want to add?</p><p className="text-xs text-muted-foreground">Min {fmt(service.min_amount)} · Max {fmt(service.max_amount)}</p></DialogHeader>
@@ -94,6 +96,17 @@ export function RechargeFlow({ page, orgSlug, slug, service, ensureSession, onCl
               )}
               <Button className="h-12 w-full text-base" style={{ background: c }} disabled={!amountOk || busy} onClick={toPay} data-testid="recharge-continue-button">{busy ? "Please wait…" : `Pay ${amountOk ? fmt(a) : ""}`}</Button>
             </>
+          )}
+          {step !== "amount" && step !== "done" && mgr.data?.employee_name && (
+            <div className="flex animate-rise items-center gap-3 rounded-2xl border bg-gradient-to-r from-sky-50 to-emerald-50 p-2.5" data-testid="recharge-manager-card">
+              <Avatar name={mgr.data.employee_name} src={mgr.data.employee_avatar} size={42} status="online" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Your manager</p>
+                <p className="truncate text-sm font-bold text-slate-900" data-testid="recharge-manager-name">{mgr.data.employee_name}{mgr.data.employee_verified && <span className="ml-1 text-sky-600">✓</span>}</p>
+                <p className="truncate text-[11px] text-slate-500">{mgr.data.employee_title || "Account manager"}{mgr.data.employee_phone && ` · ${mgr.data.employee_phone}`}</p>
+              </div>
+              <Button size="xs" variant="outline" onClick={() => nav(`/chat/${cid}`)} data-testid="recharge-manager-chat">Chat</Button>
+            </div>
           )}
           {step === "pay" && (
             <>

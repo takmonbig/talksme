@@ -352,6 +352,13 @@ class RechargeService(Base):
     active: bool = True
 
 
+class TrustLink(Base):
+    id: str = ""
+    title: str = Field("", max_length=60)
+    image: str = ""
+    url: str = Field("", pattern=r"^(https?://\S{3,500})?$")
+
+
 class PaymentConfig(Base):
     """UPI details shown on the recharge page. qr_mode 'auto' = QR generated with the exact amount; 'image' = Admin's uploaded QR."""
     upi_id: str = Field("", max_length=80)
@@ -429,6 +436,8 @@ class LandingPage(Base):
     flow: Flow = Flow()
     services: list[RechargeService] = []
     payment: PaymentConfig = PaymentConfig()
+    slides: list[str] = []
+    trust_links: list[TrustLink] = []
     auto_send_default: bool = False
     employee_can_edit_message: bool = False
     archived: bool = False
@@ -462,6 +471,8 @@ class LandingPageIn(BaseModel):
     flow: Flow = Flow()
     services: list[RechargeService] = Field(default_factory=list, max_length=30)
     payment: PaymentConfig = PaymentConfig()
+    slides: list[str] = Field(default_factory=list, max_length=8)
+    trust_links: list[TrustLink] = Field(default_factory=list, max_length=12)
 
     @field_validator("pixel_id", mode="before")
     @classmethod
